@@ -1,9 +1,8 @@
 """Orchestrate fetching, parsing, and deduplication into a combined blocklist."""
-# v1.0.0
+# v1.0.1
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from .deduplicator import Deduplicator
 from .parser import ListParser

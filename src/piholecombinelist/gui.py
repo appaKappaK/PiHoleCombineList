@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.0.0
+# v1.0.1
 
 import threading
 from pathlib import Path
@@ -227,27 +227,27 @@ class CombineTab(ctk.CTkFrame):
     def _run_combine(self) -> None:
         fetcher = ListFetcher()
         combiner = ListCombiner()
+        failed_sources: list[str] = []
 
         for label, content in self._sources:
             if content is not None:
-                # In-memory pasted text
                 combiner.add_list(content, label)
             else:
                 fetched = fetcher.fetch(label)
                 if fetched:
                     combiner.add_list(fetched, label)
+                else:
+                    failed_sources.append(label)
 
         result = combiner.get_combined()
         stats = combiner.get_stats()
 
-        # Store for Save to Library
         self._last_result = result
         self._last_stats = stats
 
-        # Update UI on main thread
-        self.after(0, lambda: self._update_output(result, stats))
+        self.after(0, lambda: self._update_output(result, stats, failed_sources))
 
-    def _update_output(self, result: str, stats: dict) -> None:
+    def _update_output(self, result: str, stats: dict, failed: Optional[list[str]] = None) -> None:
         self._output_box.configure(state="normal")
         self._output_box.delete("1.0", "end")
         self._output_box.insert("1.0", result)
@@ -256,6 +256,11 @@ class CombineTab(ctk.CTkFrame):
         self._dupes_label.configure(
             text=f"Duplicates removed: {stats['duplicates_removed']}"
         )
+        if failed:
+            messagebox.showwarning(
+                "Some sources failed",
+                f"{len(failed)} source(s) could not be fetched:\n\n" + "\n".join(failed),
+            )
 
     # ── Output actions ───────────────────────────────────────────────
 
@@ -306,10 +311,11 @@ class CombineTab(ctk.CTkFrame):
 class LibraryTab(ctk.CTkFrame):
     """The Library tab: browse folders and saved lists, load back into combiner."""
 
-    def __init__(self, parent, db: Database, get_combine_tab_cb) -> None:
+    def __init__(self, parent, db: Database, get_combine_tab_cb, switch_to_combine_cb) -> None:
         super().__init__(parent, fg_color="transparent")
         self._db = db
         self._get_combine_tab = get_combine_tab_cb
+        self._switch_to_combine = switch_to_combine_cb
         self._selected_folder_id: Optional[int] = None  # None = root
         self._selected_list_id: Optional[int] = None
 
@@ -565,8 +571,7 @@ class LibraryTab(ctk.CTkFrame):
         combine_tab.load_content_as_source(
             f"[library] {row['name']}", row["content"]
         )
-        # Switch to Combine tab
-        self.master.set("Combine")
+        self._switch_to_combine()
 
     def _move_list(self) -> None:
         if self._selected_list_id is None:
@@ -590,7 +595,7 @@ class App(ctk.CTk):
 
         self._db = Database()
 
-        self._tabs = ctk.CTkTabview(self)
+        self._tabs = ctk.CTkTabview(self, command=self._on_tab_change)
         self._tabs.pack(fill="both", expand=True, padx=8, pady=8)
         self._tabs.add("Combine")
         self._tabs.add("Library")
@@ -606,15 +611,15 @@ class App(ctk.CTk):
             self._tabs.tab("Library"),
             self._db,
             get_combine_tab_cb=lambda: self._combine_tab,
+            switch_to_combine_cb=lambda: self._tabs.set("Combine"),
         )
         self._library_tab.pack(fill="both", expand=True)
 
-        # Refresh library whenever the tab is selected
-        self._tabs._segmented_button.configure(
-            command=lambda tab: self._library_tab.refresh() if tab == "Library" else None
-        )
-
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_tab_change(self, tab_name: str) -> None:
+        if tab_name == "Library":
+            self._library_tab.refresh()
 
     def _on_close(self) -> None:
         self._db.close()
