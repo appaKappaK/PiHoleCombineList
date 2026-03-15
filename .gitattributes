@@ -1,0 +1,25 @@
+# Handle line endings properly
+*.txt text
+*.py text eol=lf
+*.csv text
+*.json text
+*.md text
+
+# Binary files that shouldn't be modified
+*.pyc binary
+*.pyo binary
+*.pyd binary
+__pycache__/* binary
+
+# If you have sample data or test files
+test_data/*.txt text
+samples/*.txt text
+
+# Database or cache files
+*.db binary
+*.sqlite binary
+
+# Domain list specific
+*.domains text          # If you use .domains extension
+*.blacklist text        # If you have blacklist files
+*.whitelist text        # If you have whitelist files
