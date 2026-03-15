@@ -1,0 +1,5 @@
+# Example blocklist 2
+tracker.com
+ads.example.com
+malware-site.org
+phishing.com
