@@ -20,6 +20,6 @@ samples/*.txt text
 *.sqlite binary
 
 # Domain list specific
-*.domains text          # If you use .domains extension
-*.blacklist text        # If you have blacklist files
-*.whitelist text        # If you have whitelist files
+*.domains text          
+*.blacklist text        
+*.whitelist text        
