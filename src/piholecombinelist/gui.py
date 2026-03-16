@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.3.2
+# v1.3.3
 
 import base64
 import importlib.resources as _ir
@@ -488,9 +488,9 @@ class LibraryTab(ctk.CTkFrame):
         move_row = ctk.CTkFrame(right, fg_color="transparent")
         move_row.grid(row=4, column=0, sticky="ew", padx=10, pady=(0, 10))
         ctk.CTkLabel(move_row, text="Move to folder:").pack(side="left", padx=(0, 8))
-        self._move_folder_var = ctk.StringVar(value="Root")
+        self._move_folder_var = ctk.StringVar(value="🏠 Root")
         self._move_menu = ctk.CTkOptionMenu(
-            move_row, variable=self._move_folder_var, values=["Root"], width=160
+            move_row, variable=self._move_folder_var, values=["🏠 Root"], width=160
         )
         self._move_menu.pack(side="left", padx=(0, 8))
         ctk.CTkButton(move_row, text="Move", width=70, command=self._move_list).pack(
@@ -508,10 +508,10 @@ class LibraryTab(ctk.CTkFrame):
         for w in self._folders_frame.winfo_children():
             w.destroy()
 
-        # Root entry
+        # Virtual root entry (unfiled lists, not a real DB folder)
         root_btn = ctk.CTkButton(
             self._folders_frame,
-            text="📁 Root",
+            text="🏠 Root",
             anchor="w",
             fg_color=(
                 "gray30" if self._selected_folder_id is None else "transparent"
@@ -552,8 +552,8 @@ class LibraryTab(ctk.CTkFrame):
 
     def _refresh_move_menu(self) -> None:
         folders = self._db.get_folders()
-        names = ["Root"] + [f["name"] for f in folders]
-        self._move_folder_map = {"Root": None, **{f["name"]: f["id"] for f in folders}}
+        names = ["🏠 Root"] + [f["name"] for f in folders]
+        self._move_folder_map = {"🏠 Root": None, **{f["name"]: f["id"] for f in folders}}
         self._move_menu.configure(values=names)
 
     # ── Folder actions ───────────────────────────────────────────────
@@ -587,11 +587,11 @@ class LibraryTab(ctk.CTkFrame):
 
     def _delete_folder(self) -> None:
         if self._selected_folder_id is None:
-            messagebox.showinfo("Select a folder", "Select a folder to delete.")
+            messagebox.showinfo("Select a folder", 'Select a folder to delete.\n\n"🏠 Root" is the default location and cannot be deleted.')
             return
         if messagebox.askyesno(
             "Delete folder",
-            "Delete this folder? Lists inside will be moved to Root.",
+            "Delete this folder? Lists inside will be moved to 🏠 Root.",
             parent=self,
         ):
             self._db.delete_folder(self._selected_folder_id)
