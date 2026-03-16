@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Pi-hole Combine List
+GenericName=Blocklist Combiner
+Comment=Combine and deduplicate Pi-hole blocklists
+Exec=pihole-gui
+Icon=piholecombinelist
+Terminal=false
+Categories=Network;Utility;
+Keywords=pihole;blocklist;dns;adblock;filter;
+StartupNotify=true

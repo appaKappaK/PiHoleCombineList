@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Dark rounded background -->
+  <rect width="256" height="256" rx="48" fill="#1e1e1e"/>
+
+  <!-- Shield body -->
+  <path d="M128 22L210 58V148C210 196 128 234 128 234C128 234 46 196 46 148V58Z" fill="#0D47A1"/>
+  <path d="M128 38L198 70V148C198 188 128 218 128 218C128 218 58 188 58 148V70Z" fill="#1565C0"/>
+
+  <!-- Funnel / filter shape -->
+  <polygon points="82,92 174,92 152,124 152,180 104,164 104,124" fill="#FFFFFF"/>
+
+  <!-- Horizontal stripes across funnel top (filter lines) -->
+  <line x1="90"  y1="104" x2="166" y2="104" stroke="#1565C0" stroke-width="7" stroke-linecap="round"/>
+  <line x1="98"  y1="116" x2="158" y2="116" stroke="#1565C0" stroke-width="7" stroke-linecap="round"/>
+</svg>
