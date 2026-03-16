@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.0.1
+# v1.1.1
 
 import threading
 from pathlib import Path
@@ -590,13 +590,13 @@ class App(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"Pi-hole Combined Blocklist Generator  v{__version__}")
-        self.geometry("1000x680")
-        self.minsize(800, 560)
+        self.geometry("1000x700")
+        self.minsize(800, 580)
 
         self._db = Database()
 
         self._tabs = ctk.CTkTabview(self, command=self._on_tab_change)
-        self._tabs.pack(fill="both", expand=True, padx=8, pady=8)
+        self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 0))
         self._tabs.add("Combine")
         self._tabs.add("Library")
 
@@ -615,7 +615,29 @@ class App(ctk.CTk):
         )
         self._library_tab.pack(fill="both", expand=True)
 
+        # Footer bar
+        footer = ctk.CTkFrame(self, fg_color="transparent")
+        footer.pack(fill="x", padx=12, pady=(4, 8))
+        self._desktop_status = ctk.CTkLabel(footer, text="", text_color="gray60")
+        self._desktop_status.pack(side="left")
+        ctk.CTkButton(
+            footer,
+            text="Install Desktop Shortcut",
+            width=190,
+            height=28,
+            command=self._install_desktop_shortcut,
+        ).pack(side="right")
+
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _install_desktop_shortcut(self) -> None:
+        from ._install_desktop import install as _install
+        ok, msg = _install()
+        if ok:
+            self._desktop_status.configure(text=msg, text_color="gray60")
+            messagebox.showinfo("Shortcut installed", msg)
+        else:
+            messagebox.showerror("Install failed", msg)
 
     def _on_tab_change(self, tab_name: str) -> None:
         if tab_name == "Library":

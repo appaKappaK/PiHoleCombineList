@@ -23,13 +23,23 @@ pip install -e .
 ## Usage
 
 ```bash
-pihole-gui
+phlist
 ```
 
 The app opens with two tabs:
 
 - **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, or push to the library
 - **Library** — browse saved lists organized in folders, view contents, export, or load back into the combiner
+
+### Desktop shortcut (Linux)
+
+Click **Install Desktop Shortcut** in the app footer, or run from the terminal:
+
+```bash
+phlist-desktop
+```
+
+This installs the icon and `.desktop` entry so the app appears in your GNOME/KDE launcher.
 
 ## Data storage
 
