@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.2.0
+# v1.3.0
 
 import re
 import threading
@@ -135,13 +135,23 @@ class CombineTab(ctk.CTkFrame):
         )
         left.rowconfigure(7, weight=1)
 
-        ctk.CTkButton(
+        self._combine_btn = ctk.CTkButton(
             left,
             text="COMBINE ALL",
             font=ctk.CTkFont(size=14, weight="bold"),
             height=40,
             command=self._combine,
-        ).grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+        )
+        self._combine_btn.grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
+
+        self._progress_bar = ctk.CTkProgressBar(left)
+        self._progress_bar.set(0)
+        self._progress_bar.grid(row=9, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 4))
+        self._progress_bar.grid_remove()
+
+        self._progress_label = ctk.CTkLabel(left, text="", text_color="gray60", anchor="w")
+        self._progress_label.grid(row=10, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 6))
+        self._progress_label.grid_remove()
 
         # ── Right panel ─────────────────────────────────────────────
         right = ctk.CTkFrame(self)
@@ -245,15 +255,27 @@ class CombineTab(ctk.CTkFrame):
         if not self._sources:
             messagebox.showinfo("No sources", "Add at least one source first.")
             return
-        # Run in a thread so the UI stays responsive during URL fetches
+        self._combine_btn.configure(state="disabled", text="Combining...")
+        self._progress_bar.set(0)
+        self._progress_bar.grid()
+        self._progress_label.configure(text="Starting...")
+        self._progress_label.grid()
         threading.Thread(target=self._run_combine, daemon=True).start()
+
+    def _set_progress(self, value: float, text: str) -> None:
+        self._progress_bar.set(value)
+        self._progress_label.configure(text=text)
 
     def _run_combine(self) -> None:
         fetcher = ListFetcher()
         combiner = ListCombiner()
         failed_sources: list[str] = []
+        total = len(self._sources)
 
-        for label, content in self._sources:
+        for i, (label, content) in enumerate(self._sources):
+            short = label if len(label) <= 55 else label[:52] + "..."
+            self.after(0, lambda p=i / total, t=f"[{i + 1}/{total}]  {short}": self._set_progress(p, t))
+
             if content is not None:
                 combiner.add_list(content, label)
             else:
@@ -280,6 +302,9 @@ class CombineTab(ctk.CTkFrame):
         self._dupes_label.configure(
             text=f"Duplicates removed: {stats['duplicates_removed']}"
         )
+        self._combine_btn.configure(state="normal", text="COMBINE ALL")
+        self._progress_bar.grid_remove()
+        self._progress_label.grid_remove()
         if failed:
             messagebox.showwarning(
                 "Some sources failed",
