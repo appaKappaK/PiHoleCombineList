@@ -13,8 +13,15 @@ from typing import Optional
 # Matches any http/https URL in arbitrary text (e.g. Pi-hole dashboard paste)
 _URL_RE = re.compile(r'https?://\S+')
 
-# Extracts the username segment from GitHub / raw.githubusercontent URLs
-_GITHUB_USER_RE = re.compile(r'https?://(?:raw\.githubusercontent|github)\.com/([^/]+)/')
+# Extracts the username/author from common code-hosting URL patterns
+_FORGE_USER_RE = re.compile(
+    r'https?://(?:'
+    r'(?:raw\.githubusercontent|github)\.com/([^/]+)/'  # github.com / raw
+    r'|([^./]+)\.(?:github|gitlab)\.io/'                  # username.github.io / username.gitlab.io
+    r'|gitlab\.com/([^/]+)/'                             # gitlab.com
+    r'|bitbucket\.org/([^/]+)/'                          # bitbucket.org
+    r')'
+)
 
 # Characters/words that are noise when extracting credit text from a pasted table row
 _NOISE_RE = re.compile(r'[✓✗☑☐✔✘]|\b(enabled|disabled|true|false|yes|no)\b', re.I)
@@ -29,10 +36,10 @@ def _credit_for_url(url: str, line: str) -> Optional[str]:
     remaining = re.sub(r'^\d+\s*|\s*\d+$', '', remaining).strip()  # leading/trailing IDs
     if len(remaining) > 2:
         return remaining
-    # 2. Fall back to GitHub username extracted from the URL
-    m = _GITHUB_USER_RE.search(url)
+    # 2. Fall back to username extracted from known code-hosting URL patterns
+    m = _FORGE_USER_RE.search(url)
     if m:
-        return m.group(1)
+        return next(g for g in m.groups() if g is not None)
     return None
 
 import customtkinter as ctk
