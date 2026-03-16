@@ -35,10 +35,11 @@ pip install -e .
 phlist
 ```
 
-The app opens with two tabs:
+The app opens with three tabs:
 
 - **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, export, or push to Pi-hole
 - **Library** — browse saved lists organized in folders, view contents, export, or load back into the combiner
+- **Settings** — server port and desktop shortcut installer
 
 ### Pushing to Pi-hole
 
@@ -50,9 +51,30 @@ The app opens with two tabs:
 
 > Pi-hole and your PC just need to be on the same local network. The server defaults to port **8765**.
 
+### Output format
+
+When you click *Combine All*, the app produces a plain-text file with a short comment header followed by one domain per line, sorted alphabetically:
+
+```
+# Pi-hole Combined Blocklist
+# Generated: 2026-03-15 14:32:07
+# Unique domains: 14267225
+# Duplicates removed: 312441
+# Lists combined: 8
+
+0-000.store
+00-0day.com
+000free.us
+001.dk
+0tracker.com
+...
+```
+
+The header lines all start with `#` so Pi-hole's gravity parser skips them automatically. Everything below is a bare domain — compatible with Pi-hole's plain-domain blocklist format.
+
 ### Desktop shortcut (Linux)
 
-Click **Install Desktop Shortcut** in the app footer, or run:
+Open the **Settings** tab and click **Install Desktop Shortcut**, or run:
 
 ```bash
 phlist-desktop
@@ -64,7 +86,7 @@ This installs the icon and `.desktop` entry so the app appears in your GNOME/KDE
 
 ```
 src/piholecombinelist/
-  gui.py              — Desktop GUI (customtkinter, two tabs)
+  gui.py              — Desktop GUI (customtkinter, three tabs)
   combiner.py         — Orchestrates fetch → parse → deduplicate
   fetcher.py          — Fetches URLs and local files
   parser.py           — Extracts/validates domains from all supported formats
@@ -103,6 +125,9 @@ pytest tests/
 - `http.server` / `socket` (Python stdlib — no extra install needed for Serve List)
 
 ## Recent updates
+
+**v1.5.0**
+- New **Settings** tab — server port field (change from default 8765 for rare port conflicts) and desktop shortcut installer moved here from footer
 
 **v1.4.1**
 - Red/green `●` indicator next to Serve List button shows server state at a glance
