@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.3.1
+# v1.3.2
 
 import base64
 import importlib.resources as _ir
@@ -34,6 +34,7 @@ class SaveToLibraryDialog(ctk.CTkToplevel):
         self.geometry("360x200")
         self.resizable(False, False)
 
+        self._db = db
         self.result_name: Optional[str] = None
         self.result_folder_id: Optional[int] = None
 
@@ -42,14 +43,14 @@ class SaveToLibraryDialog(ctk.CTkToplevel):
         self._name_entry.pack(padx=20)
 
         ctk.CTkLabel(self, text="Folder:").pack(padx=20, pady=(12, 4), anchor="w")
-        folders = db.get_folders()
-        self._folder_map = {f["name"]: f["id"] for f in folders}
-        folder_names = ["Root"] + list(self._folder_map.keys())
+        self._folder_map: dict = {}
         self._folder_var = ctk.StringVar(value="Root")
         self._folder_menu = ctk.CTkOptionMenu(
-            self, variable=self._folder_var, values=folder_names, width=320
+            self, variable=self._folder_var, values=["Root"],
+            width=320, command=self._on_folder_change,
         )
         self._folder_menu.pack(padx=20)
+        self._refresh_folder_menu()
 
         ctk.CTkButton(self, text="Save", command=self._on_save, width=320).pack(
             padx=20, pady=16
@@ -61,13 +62,38 @@ class SaveToLibraryDialog(ctk.CTkToplevel):
         self.focus_force()
         self.grab_set()
 
+    def _refresh_folder_menu(self, select: Optional[str] = None) -> None:
+        folders = self._db.get_folders()
+        self._folder_map = {f["name"]: f["id"] for f in folders}
+        options = ["Root"] + list(self._folder_map.keys()) + ["+ New Folder"]
+        self._folder_menu.configure(values=options)
+        if select and select in self._folder_map:
+            self._folder_var.set(select)
+
+    def _on_folder_change(self, value: str) -> None:
+        if value != "+ New Folder":
+            return
+        name = simpledialog.askstring("New Folder", "Folder name:", parent=self)
+        if name and name.strip():
+            if name.strip().lower() == "root":
+                messagebox.showwarning("Reserved name", '"Root" is reserved — choose a different name.', parent=self)
+                self._folder_var.set("Root")
+                return
+            self._db.create_folder(name.strip())
+            self._refresh_folder_menu(select=name.strip())
+        else:
+            self._folder_var.set("Root")
+
     def _on_save(self) -> None:
         name = self._name_entry.get().strip()
         if not name:
             messagebox.showwarning("Name required", "Please enter a list name.", parent=self)
             return
-        self.result_name = name
         chosen = self._folder_var.get()
+        if chosen == "+ New Folder":
+            self._folder_var.set("Root")
+            chosen = "Root"
+        self.result_name = name
         self.result_folder_id = self._folder_map.get(chosen)  # None = root
         self.destroy()
 
@@ -541,6 +567,9 @@ class LibraryTab(ctk.CTkFrame):
     def _new_folder(self) -> None:
         name = simpledialog.askstring("New Folder", "Folder name:", parent=self)
         if name and name.strip():
+            if name.strip().lower() == "root":
+                messagebox.showwarning("Reserved name", '"Root" is reserved — choose a different name.', parent=self)
+                return
             self._db.create_folder(name.strip())
             self.refresh()
 
@@ -550,6 +579,9 @@ class LibraryTab(ctk.CTkFrame):
             return
         new_name = simpledialog.askstring("Rename Folder", "New name:", parent=self)
         if new_name and new_name.strip():
+            if new_name.strip().lower() == "root":
+                messagebox.showwarning("Reserved name", '"Root" is reserved — choose a different name.', parent=self)
+                return
             self._db.rename_folder(self._selected_folder_id, new_name.strip())
             self.refresh()
 
