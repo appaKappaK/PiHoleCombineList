@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.4.0
+# v1.4.1
 
 import base64
 import importlib.resources as _ir
@@ -227,6 +227,10 @@ class CombineTab(ctk.CTkFrame):
         # Serve row — host the list over HTTP for Pi-hole to pull
         serve_row = ctk.CTkFrame(right, fg_color="transparent")
         serve_row.grid(row=4, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._serve_indicator = ctk.CTkLabel(
+            serve_row, text="●", text_color="#C0392B", width=16
+        )
+        self._serve_indicator.pack(side="left", padx=(0, 4))
         self._serve_btn = ctk.CTkButton(
             serve_row, text="Serve List", width=110, command=self._toggle_serve
         )
@@ -409,6 +413,7 @@ class CombineTab(ctk.CTkFrame):
     def _toggle_serve(self) -> None:
         if self._server.is_running:
             self._server.stop()
+            self._serve_indicator.configure(text_color="#C0392B")
             self._serve_btn.configure(text="Serve List", fg_color=["#3B8ED0", "#1F6AA5"])
             self._serve_url_entry.pack_forget()
             self._serve_copy_btn.pack_forget()
@@ -425,6 +430,7 @@ class CombineTab(ctk.CTkFrame):
             self._serve_url_var.set(url)
             self._serve_url_entry.pack(side="left", padx=(0, 8))
             self._serve_copy_btn.pack(side="left")
+            self._serve_indicator.configure(text_color="#27AE60")
             self._serve_btn.configure(text="Stop Serving", fg_color=["#C0392B", "#922B21"])
 
     def _copy_serve_url(self) -> None:
