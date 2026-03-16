@@ -45,7 +45,7 @@ The app opens with three tabs:
 ### Pushing to Pi-hole
 
 1. Build your combined list in the Combine tab
-2. Click **Serve List** — the `●` indicator turns green and a URL appears (e.g. `http://192.168.1.50:8765/blocklist.txt`)
+2. Click **Serve List** — the `●` indicator turns green and a URL appears (e.g. `http://YOUR.IP.GO.HERE:8765/blocklist.txt`)
 3. Copy the URL and paste it into Pi-hole's **Adlists** page
 4. Run **Update Gravity** in Pi-hole — it fetches and caches the list
 5. Click **Stop Serving** or close the app — Pi-hole retains the list from its gravity cache
