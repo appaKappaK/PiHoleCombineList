@@ -49,7 +49,6 @@ pip-delete-this-directory.txt
 
 # Project specific
 data/output/
-!data/sample_lists/
 
 # Keep bundled assets even if other binary rules would catch them
 !src/piholecombinelist/assets/*.png
