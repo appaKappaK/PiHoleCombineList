@@ -12,9 +12,12 @@ class Tooltip:
         self._delay = delay
         self._tip_window: tk.Toplevel | None = None
         self._after_id: str | None = None
-        widget.bind("<Enter>", self._schedule, add="+")
-        widget.bind("<Leave>", self._cancel, add="+")
-        widget.bind("<ButtonPress>", self._cancel, add="+")
+        try:
+            widget.bind("<Enter>", self._schedule, add="+")
+            widget.bind("<Leave>", self._cancel, add="+")
+            widget.bind("<ButtonPress>", self._cancel, add="+")
+        except (NotImplementedError, tk.TclError):
+            pass  # some CTk widgets (e.g. CTkSegmentedButton) don't support bind
 
     def _schedule(self, _event: tk.Event) -> None:
         self._cancel()
