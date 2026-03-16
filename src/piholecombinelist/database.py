@@ -134,6 +134,12 @@ class Database:
         ).fetchone()
         return dict(row) if row else None
 
+    def rename_list(self, list_id: int, name: str) -> None:
+        self._conn.execute(
+            "UPDATE lists SET name = ? WHERE id = ?", (name, list_id)
+        )
+        self._conn.commit()
+
     def delete_list(self, list_id: int) -> None:
         self._conn.execute("DELETE FROM lists WHERE id = ?", (list_id,))
         self._conn.commit()

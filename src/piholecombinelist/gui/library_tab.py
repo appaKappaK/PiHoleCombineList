@@ -85,10 +85,21 @@ class LibraryTab(ctk.CTkFrame):
         self._lists_frame.grid(row=4, column=0, sticky="nsew", padx=10)
         left.rowconfigure(4, weight=1)
 
-        del_list_btn = ctk.CTkButton(
-            left, text="Delete Selected List", command=self._delete_list
+        list_btn_row = ctk.CTkFrame(left, fg_color="transparent")
+        list_btn_row.grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 10))
+        list_btn_row.columnconfigure(0, weight=1)
+        list_btn_row.columnconfigure(1, weight=1)
+
+        rename_list_btn = ctk.CTkButton(
+            list_btn_row, text="Rename", command=self._rename_list
         )
-        del_list_btn.grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 10))
+        rename_list_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        Tooltip(rename_list_btn, "Rename the selected list.")
+
+        del_list_btn = ctk.CTkButton(
+            list_btn_row, text="Delete", command=self._delete_list
+        )
+        del_list_btn.grid(row=0, column=1, sticky="ew")
         Tooltip(del_list_btn, "Permanently delete the selected list from the library.")
 
         # ── Right panel (content viewer) ────────────────────────────
@@ -294,6 +305,15 @@ class LibraryTab(ctk.CTkFrame):
             self._lib_serve_btn.configure(text="Host", fg_color=["#3B8ED0", "#1F6AA5"])
             self._lib_serve_url_entry.pack_forget()
             self._lib_serve_copy_btn.pack_forget()
+
+    def _rename_list(self) -> None:
+        if self._selected_list_id is None:
+            messagebox.showinfo("Select a list", "Select a list to rename.")
+            return
+        new_name = simpledialog.askstring("Rename List", "New name:", parent=self)
+        if new_name and new_name.strip():
+            self._db.rename_list(self._selected_list_id, new_name.strip())
+            self._refresh_lists()
 
     def _delete_list(self) -> None:
         if self._selected_list_id is None:
