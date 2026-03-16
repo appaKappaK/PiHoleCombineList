@@ -6,6 +6,7 @@ import customtkinter as ctk
 
 from ..database import Database
 from ..server import ListServer
+from .tooltip import Tooltip
 
 
 class SettingsTab(ctk.CTkFrame):
@@ -30,48 +31,46 @@ class SettingsTab(ctk.CTkFrame):
         type_frame = ctk.CTkFrame(self)
         type_frame.grid(row=1, column=0, sticky="w", padx=20)
 
-        ctk.CTkSegmentedButton(
+        type_toggle = ctk.CTkSegmentedButton(
             type_frame,
             values=["Blocklist", "Allowlist"],
             variable=self._list_type_var,
-        ).pack(padx=12, pady=12)
-
-        ctk.CTkLabel(
-            self, text="Sets the output header and window title.",
-            text_color="gray60",
-        ).grid(row=2, column=0, sticky="w", padx=20, pady=(4, 20))
+        )
+        type_toggle.pack(padx=12, pady=12)
+        Tooltip(type_toggle, "Cosmetic only: changes the .txt header and window title. Does not affect how Pi-hole processes the list.")
 
         # ── Server section ───────────────────────────────────────────
         ctk.CTkLabel(
             self, text="SERVER", font=ctk.CTkFont(size=13, weight="bold")
-        ).grid(row=3, column=0, sticky="w", padx=20, pady=(0, 8))
+        ).grid(row=2, column=0, sticky="w", padx=20, pady=(20, 8))
 
         port_frame = ctk.CTkFrame(self)
-        port_frame.grid(row=4, column=0, sticky="w", padx=20)
+        port_frame.grid(row=3, column=0, sticky="w", padx=20)
 
         ctk.CTkLabel(port_frame, text="Listen port:").pack(side="left", padx=(12, 8), pady=12)
         self._port_entry = ctk.CTkEntry(port_frame, width=80)
         self._port_entry.insert(0, str(self._server._port))
         self._port_entry.pack(side="left", padx=(0, 8))
-        ctk.CTkButton(port_frame, text="Apply", width=70, command=self._apply_port).pack(side="left")
+        Tooltip(self._port_entry, "The port the HTTP server listens on. Default: 8765.")
 
-        ctk.CTkLabel(
-            self, text="Takes effect the next time you start serving.",
-            text_color="gray60",
-        ).grid(row=5, column=0, sticky="w", padx=20, pady=(4, 20))
+        apply_btn = ctk.CTkButton(port_frame, text="Apply", width=70, command=self._apply_port)
+        apply_btn.pack(side="left")
+        Tooltip(apply_btn, "Save the port. Takes effect the next time you start serving.")
 
         # ── Desktop integration section ──────────────────────────────
         ctk.CTkLabel(
             self, text="DESKTOP INTEGRATION", font=ctk.CTkFont(size=13, weight="bold")
-        ).grid(row=6, column=0, sticky="w", padx=20, pady=(0, 8))
+        ).grid(row=4, column=0, sticky="w", padx=20, pady=(20, 8))
 
         desktop_frame = ctk.CTkFrame(self)
-        desktop_frame.grid(row=7, column=0, sticky="w", padx=20)
+        desktop_frame.grid(row=5, column=0, sticky="w", padx=20)
 
-        ctk.CTkButton(
+        desktop_btn = ctk.CTkButton(
             desktop_frame, text="Install Desktop Shortcut", width=190,
             command=self._install_desktop,
-        ).pack(side="left", padx=12, pady=12)
+        )
+        desktop_btn.pack(side="left", padx=12, pady=12)
+        Tooltip(desktop_btn, "Create a .desktop launcher entry so the app appears in your GNOME/KDE app menu.")
         self._desktop_status = ctk.CTkLabel(desktop_frame, text="", text_color="gray60")
         self._desktop_status.pack(side="left", padx=(0, 12))
 

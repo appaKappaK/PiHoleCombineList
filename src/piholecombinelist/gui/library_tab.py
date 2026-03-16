@@ -10,6 +10,7 @@ import customtkinter as ctk
 
 from ..database import Database
 from ..server import ListServer
+from .tooltip import Tooltip
 
 
 def _slugify(name: str) -> str:
@@ -46,8 +47,6 @@ class LibraryTab(ctk.CTkFrame):
         # ── Left panel (folders + lists) ────────────────────────────
         left = ctk.CTkFrame(self)
         left.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=8)
-        left.rowconfigure(2, weight=1)
-        left.rowconfigure(4, weight=1)
         left.columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
@@ -60,15 +59,23 @@ class LibraryTab(ctk.CTkFrame):
 
         folder_btn_row = ctk.CTkFrame(left, fg_color="transparent")
         folder_btn_row.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 0))
-        ctk.CTkButton(
+        new_folder_btn = ctk.CTkButton(
             folder_btn_row, text="+ New Folder", width=100, command=self._new_folder
-        ).pack(side="left", padx=(0, 4))
-        ctk.CTkButton(
+        )
+        new_folder_btn.pack(side="left", padx=(0, 4))
+        Tooltip(new_folder_btn, "Create a new folder to organize your saved lists.")
+
+        rename_btn = ctk.CTkButton(
             folder_btn_row, text="Rename", width=80, command=self._rename_folder
-        ).pack(side="left", padx=(0, 4))
-        ctk.CTkButton(
+        )
+        rename_btn.pack(side="left", padx=(0, 4))
+        Tooltip(rename_btn, "Rename the selected folder.")
+
+        del_folder_btn = ctk.CTkButton(
             folder_btn_row, text="Delete", width=70, command=self._delete_folder
-        ).pack(side="left")
+        )
+        del_folder_btn.pack(side="left")
+        Tooltip(del_folder_btn, "Delete the selected folder. Lists inside are moved to Root.")
 
         ctk.CTkLabel(
             left, text="LISTS", font=ctk.CTkFont(size=12, weight="bold")
@@ -78,9 +85,11 @@ class LibraryTab(ctk.CTkFrame):
         self._lists_frame.grid(row=4, column=0, sticky="nsew", padx=10)
         left.rowconfigure(4, weight=1)
 
-        ctk.CTkButton(
+        del_list_btn = ctk.CTkButton(
             left, text="Delete Selected List", command=self._delete_list
-        ).grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 10))
+        )
+        del_list_btn.grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 10))
+        Tooltip(del_list_btn, "Permanently delete the selected list from the library.")
 
         # ── Right panel (content viewer) ────────────────────────────
         right = ctk.CTkFrame(self)
@@ -104,17 +113,21 @@ class LibraryTab(ctk.CTkFrame):
 
         action_row = ctk.CTkFrame(right, fg_color="transparent")
         action_row.grid(row=3, column=0, sticky="ew", padx=10, pady=10)
-        ctk.CTkButton(action_row, text="Copy", command=self._copy).pack(
-            side="left", padx=(0, 8)
-        )
-        ctk.CTkButton(action_row, text="Export File...", command=self._export).pack(
-            side="left", padx=(0, 8)
-        )
-        ctk.CTkButton(
+        copy_btn = ctk.CTkButton(action_row, text="Copy", command=self._copy)
+        copy_btn.pack(side="left", padx=(0, 8))
+        Tooltip(copy_btn, "Copy the list contents to the clipboard.")
+
+        export_btn = ctk.CTkButton(action_row, text="Export File...", command=self._export)
+        export_btn.pack(side="left", padx=(0, 8))
+        Tooltip(export_btn, "Export the list as a .txt file to disk.")
+
+        load_btn = ctk.CTkButton(
             action_row,
             text="Load into Combiner",
             command=self._load_into_combiner,
-        ).pack(side="left")
+        )
+        load_btn.pack(side="left")
+        Tooltip(load_btn, "Add this list as a source in the Combine tab to merge with other lists.")
 
         # Move-to row
         move_row = ctk.CTkFrame(right, fg_color="transparent")
@@ -125,9 +138,9 @@ class LibraryTab(ctk.CTkFrame):
             move_row, variable=self._move_folder_var, values=["🏠 Root"], width=160
         )
         self._move_menu.pack(side="left", padx=(0, 8))
-        ctk.CTkButton(move_row, text="Move", width=70, command=self._move_list).pack(
-            side="left"
-        )
+        move_btn = ctk.CTkButton(move_row, text="Move", width=70, command=self._move_list)
+        move_btn.pack(side="left")
+        Tooltip(move_btn, "Move the selected list to a different folder. Doesn't change content.")
 
         # Serve row — host a saved list over HTTP for Pi-hole
         serve_row = ctk.CTkFrame(right, fg_color="transparent")
@@ -140,6 +153,8 @@ class LibraryTab(ctk.CTkFrame):
             serve_row, text="Serve", width=90, command=self._toggle_lib_serve
         )
         self._lib_serve_btn.pack(side="left", padx=(0, 8))
+        Tooltip(self._lib_serve_btn, "Host this list over HTTP so Pi-hole can pull it via gravity.")
+
         self._lib_serve_url_var = ctk.StringVar()
         self._lib_serve_url_entry = ctk.CTkEntry(
             serve_row, textvariable=self._lib_serve_url_var, width=280, state="disabled",
@@ -147,6 +162,7 @@ class LibraryTab(ctk.CTkFrame):
         self._lib_serve_copy_btn = ctk.CTkButton(
             serve_row, text="Copy URL", width=80, command=self._copy_lib_serve_url
         )
+        Tooltip(self._lib_serve_copy_btn, "Copy the URL to paste into Pi-hole's Adlists page.")
         # URL entry + copy button hidden until a list is being served
 
     # ── Refresh helpers ──────────────────────────────────────────────

@@ -13,6 +13,7 @@ from ..combiner import ListCombiner
 from ..database import Database
 from ..fetcher import ListFetcher
 from ..server import ListServer
+from .tooltip import Tooltip
 
 # Matches any http/https URL in arbitrary text (e.g. Pi-hole dashboard paste).
 # Excludes backtick, pipe, and angle-bracket characters that appear in markdown
@@ -167,7 +168,6 @@ class CombineTab(ctk.CTkFrame):
         # ── Left panel ──────────────────────────────────────────────
         left = ctk.CTkFrame(self)
         left.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=8)
-        left.rowconfigure(5, weight=1)
         left.columnconfigure(0, weight=1)
 
         ctk.CTkLabel(left, text="SOURCES", font=ctk.CTkFont(size=13, weight="bold")).grid(
@@ -181,14 +181,16 @@ class CombineTab(ctk.CTkFrame):
         self._url_entry = ctk.CTkEntry(url_row, placeholder_text="https://...")
         self._url_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self._url_entry.bind("<Return>", lambda _: self._add_url())
-        ctk.CTkButton(url_row, text="+", width=36, command=self._add_url).grid(
-            row=0, column=1
-        )
+        add_url_btn = ctk.CTkButton(url_row, text="+", width=36, command=self._add_url)
+        add_url_btn.grid(row=0, column=1)
+        Tooltip(add_url_btn, "Add this URL as a blocklist source.")
 
         # Browse file button
-        ctk.CTkButton(
+        browse_btn = ctk.CTkButton(
             left, text="Browse File...", command=self._browse_file, anchor="w"
-        ).grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(8, 0))
+        )
+        browse_btn.grid(row=2, column=0, columnspan=2, sticky="ew", padx=10, pady=(8, 0))
+        Tooltip(browse_btn, "Select a local .txt blocklist file to add as a source.")
 
         # Paste area
         ctk.CTkLabel(left, text="Paste raw blocklist text:").grid(
@@ -196,16 +198,27 @@ class CombineTab(ctk.CTkFrame):
         )
         self._paste_box = ctk.CTkTextbox(left, height=120)
         self._paste_box.grid(row=4, column=0, columnspan=2, sticky="ew", padx=10)
+        self._paste_placeholder = "Paste raw blocklist text or URLs here..."
+        self._paste_box.insert("1.0", self._paste_placeholder)
+        self._paste_box.configure(text_color="gray60")
+        self._paste_has_placeholder = True
+        self._paste_box.bind("<FocusIn>", self._paste_focus_in)
+        self._paste_box.bind("<FocusOut>", self._paste_focus_out)
         paste_btn_row = ctk.CTkFrame(left, fg_color="transparent")
         paste_btn_row.grid(row=5, column=0, columnspan=2, sticky="ew", padx=10, pady=(6, 0))
         paste_btn_row.columnconfigure(0, weight=1)
         paste_btn_row.columnconfigure(1, weight=1)
-        ctk.CTkButton(
+        add_btn = ctk.CTkButton(
             paste_btn_row, text="Add as Blocklist", command=self._add_pasted
-        ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        ctk.CTkButton(
+        )
+        add_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        Tooltip(add_btn, "Treats pasted text as a single raw blocklist and adds it as one source.")
+
+        extract_btn = ctk.CTkButton(
             paste_btn_row, text="Extract URLs", command=self._extract_urls
-        ).grid(row=0, column=1, sticky="ew")
+        )
+        extract_btn.grid(row=0, column=1, sticky="ew")
+        Tooltip(extract_btn, "Pulls all URLs from pasted text and adds each as a separate source.")
 
         # Sources list
         ctk.CTkLabel(left, text="Sources added:").grid(
@@ -259,15 +272,19 @@ class CombineTab(ctk.CTkFrame):
         # Action buttons
         btn_row = ctk.CTkFrame(right, fg_color="transparent")
         btn_row.grid(row=3, column=0, sticky="ew", padx=10, pady=(10, 4))
-        ctk.CTkButton(btn_row, text="Copy to Clipboard", command=self._copy).pack(
-            side="left", padx=(0, 8)
-        )
-        ctk.CTkButton(btn_row, text="Save File...", command=self._save_file).pack(
-            side="left", padx=(0, 8)
-        )
-        ctk.CTkButton(
+        copy_btn = ctk.CTkButton(btn_row, text="Copy to Clipboard", command=self._copy)
+        copy_btn.pack(side="left", padx=(0, 8))
+        Tooltip(copy_btn, "Copy the combined output to the clipboard.")
+
+        save_file_btn = ctk.CTkButton(btn_row, text="Save File...", command=self._save_file)
+        save_file_btn.pack(side="left", padx=(0, 8))
+        Tooltip(save_file_btn, "Export the combined list as a .txt file to disk.")
+
+        save_lib_btn = ctk.CTkButton(
             btn_row, text="Save to Library", command=self._save_to_library
-        ).pack(side="left")
+        )
+        save_lib_btn.pack(side="left")
+        Tooltip(save_lib_btn, "Save to the app's built-in library for later use.")
 
         # Serve row — host the list over HTTP for Pi-hole to pull
         serve_row = ctk.CTkFrame(right, fg_color="transparent")
@@ -280,10 +297,14 @@ class CombineTab(ctk.CTkFrame):
             serve_row, text="Serve List", width=110, command=self._toggle_serve
         )
         self._serve_btn.pack(side="left", padx=(0, 8))
+        Tooltip(self._serve_btn, "Host the combined list over HTTP so Pi-hole can pull it via gravity.")
+
         self._serve_name_entry = ctk.CTkEntry(
             serve_row, placeholder_text="blocklist", width=120
         )
         self._serve_name_entry.pack(side="left", padx=(0, 4))
+        Tooltip(self._serve_name_entry, "Name the served file to create unique URLs for Pi-hole group management. Leave blank for 'blocklist.txt'.")
+
         ctk.CTkLabel(serve_row, text=".txt", text_color="gray60").pack(
             side="left", padx=(0, 8)
         )
@@ -294,7 +315,22 @@ class CombineTab(ctk.CTkFrame):
         self._serve_copy_btn = ctk.CTkButton(
             serve_row, text="Copy URL", width=80, command=self._copy_serve_url
         )
+        Tooltip(self._serve_copy_btn, "Copy the URL to paste into Pi-hole's Adlists page.")
         # URL entry + copy button hidden until server starts
+
+    # ── Paste placeholder ────────────────────────────────────────────
+
+    def _paste_focus_in(self, _event=None) -> None:
+        if self._paste_has_placeholder:
+            self._paste_box.delete("1.0", "end")
+            self._paste_box.configure(text_color=("gray10", "gray90"))
+            self._paste_has_placeholder = False
+
+    def _paste_focus_out(self, _event=None) -> None:
+        if not self._paste_box.get("1.0", "end").strip():
+            self._paste_box.insert("1.0", self._paste_placeholder)
+            self._paste_box.configure(text_color="gray60")
+            self._paste_has_placeholder = True
 
     # ── Source management ────────────────────────────────────────────
 
@@ -316,12 +352,15 @@ class CombineTab(ctk.CTkFrame):
             self._refresh_sources_list()
 
     def _add_pasted(self) -> None:
+        if self._paste_has_placeholder:
+            return
         text = self._paste_box.get("1.0", "end").strip()
         if not text:
             return
         label = f"[pasted #{len(self._sources) + 1}]"
         self._sources.append((label, text))
         self._paste_box.delete("1.0", "end")
+        self._paste_focus_out()  # restore placeholder
         self._refresh_sources_list()
 
     def _extract_urls(self) -> None:
@@ -330,6 +369,9 @@ class CombineTab(ctk.CTkFrame):
         Also records a credit name for each URL (from surrounding line text or
         the GitHub username in the URL) for inclusion in the combined list header.
         """
+        if self._paste_has_placeholder:
+            messagebox.showinfo("No URLs found", "No http/https URLs were found in the pasted text.")
+            return
         text = self._paste_box.get("1.0", "end")
         added = 0
         for line in text.splitlines():
@@ -343,6 +385,7 @@ class CombineTab(ctk.CTkFrame):
             messagebox.showinfo("No URLs found", "No http/https URLs were found in the pasted text.")
             return
         self._paste_box.delete("1.0", "end")
+        self._paste_focus_out()  # restore placeholder
         self._refresh_sources_list()
         messagebox.showinfo("URLs added", f"Added {added} URL(s) as sources.")
 

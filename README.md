@@ -41,7 +41,9 @@ The app opens with three tabs:
 
 - **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, export, or push to Pi-hole
 - **Library** — browse saved lists organized in folders, view contents, export, or load back into the combiner
-- **Settings** — Blocklist/Allowlist toggle, server port, desktop shortcut installer (all settings persist across restarts)
+- **Settings** — Blocklist/Allowlist toggle (switches whether the combined output is labeled as a blocklist or allowlist — use Allowlist mode when combining domain whitelists for Pi-hole's allow list), server port, desktop shortcut installer (all settings persist across restarts)
+
+> **Note:** The Blocklist/Allowlist toggle only changes the output header label — it does not affect how Pi-hole processes the list. Blocklists should be added to Pi-hole's **Adlists** page; allowlists should be added to the **Whitelist** section on Pi-hole's Domains page.
 
 ### Pushing to Pi-hole
 
@@ -97,6 +99,7 @@ src/piholecombinelist/
     combine_tab.py    — Combine tab + URL/credit extraction helpers
     library_tab.py    — Library tab
     settings_tab.py   — Settings tab
+    tooltip.py        — Hover tooltip widget for buttons and inputs
   combiner.py         — Orchestrates fetch → parse → deduplicate
   fetcher.py          — Fetches URLs and local files
   parser.py           — Extracts/validates domains from all supported formats
@@ -144,6 +147,9 @@ pytest tests/
 - **Multi-path serving** — the HTTP server now supports serving multiple lists simultaneously at different URL paths; enables Pi-hole group management with separate lists per device group
 - **Custom serve filename** — name the served file in the Combine tab (e.g. `general` → `/general.txt`) instead of the fixed `/blocklist.txt`
 - **Serve from Library** — serve any saved list directly from the Library tab with its own URL, without needing to re-combine
+- **Hover tooltips** — all buttons and key inputs now show descriptive tooltips on mouseover
+- **Paste box placeholder** — gray hint text in the paste area that clears on focus
+- **Layout fix** — paste buttons no longer get cut off when combining large lists
 
 **v1.6.0**
 - **Settings persistence** — port and Blocklist/Allowlist choice now saved to the local database; restored automatically on next launch
