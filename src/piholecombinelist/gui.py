@@ -1,5 +1,5 @@
 """Desktop GUI for Pi-hole Combined Blocklist Generator."""
-# v1.4.1
+# v1.5.0
 
 import base64
 import importlib.resources as _ir
@@ -102,11 +102,11 @@ class SaveToLibraryDialog(ctk.CTkToplevel):
 class CombineTab(ctk.CTkFrame):
     """The Combine tab: add sources, combine, view/copy/save output."""
 
-    def __init__(self, parent, db: Database, switch_to_library_cb) -> None:
+    def __init__(self, parent, db: Database, switch_to_library_cb, server: ListServer) -> None:
         super().__init__(parent, fg_color="transparent")
         self._db = db
         self._switch_to_library = switch_to_library_cb
-        self._server = ListServer()
+        self._server = server
 
         # List of (label, content_or_None) tuples.
         # content is None for URL/file paths (fetched on combine); str for pasted text.
@@ -438,10 +438,6 @@ class CombineTab(ctk.CTkFrame):
         self.clipboard_append(self._serve_url_var.get())
         messagebox.showinfo("Copied", "URL copied — paste it into Pi-hole's Adlists page,\nthen run gravity.")
 
-    def stop_server(self) -> None:
-        """Stop the HTTP server if running (called on app close)."""
-        self._server.stop()
-
     def load_content_as_source(self, label: str, content: str) -> None:
         """Called by LibraryTab to inject a saved list as an in-memory source."""
         self._sources.append((label, content))
@@ -730,6 +726,81 @@ class LibraryTab(ctk.CTkFrame):
         messagebox.showinfo("Moved", f"List moved to {folder_name}.")
 
 
+class SettingsTab(ctk.CTkFrame):
+    """The Settings tab: server port and desktop shortcut."""
+
+    def __init__(self, parent, server: ListServer) -> None:
+        super().__init__(parent, fg_color="transparent")
+        self._server = server
+        self._build_ui()
+
+    def _build_ui(self) -> None:
+        self.columnconfigure(0, weight=1)
+
+        # ── Server section ───────────────────────────────────────────
+        ctk.CTkLabel(
+            self, text="SERVER", font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=0, column=0, sticky="w", padx=20, pady=(20, 8))
+
+        port_frame = ctk.CTkFrame(self)
+        port_frame.grid(row=1, column=0, sticky="w", padx=20)
+
+        ctk.CTkLabel(port_frame, text="Listen port:").pack(side="left", padx=(12, 8), pady=12)
+        self._port_entry = ctk.CTkEntry(port_frame, width=80)
+        self._port_entry.insert(0, str(self._server._port))
+        self._port_entry.pack(side="left", padx=(0, 8))
+        ctk.CTkButton(port_frame, text="Apply", width=70, command=self._apply_port).pack(side="left")
+
+        ctk.CTkLabel(
+            self, text="Takes effect the next time you start serving.",
+            text_color="gray60",
+        ).grid(row=2, column=0, sticky="w", padx=20, pady=(4, 20))
+
+        # ── Desktop integration section ──────────────────────────────
+        ctk.CTkLabel(
+            self, text="DESKTOP INTEGRATION", font=ctk.CTkFont(size=13, weight="bold")
+        ).grid(row=3, column=0, sticky="w", padx=20, pady=(0, 8))
+
+        desktop_frame = ctk.CTkFrame(self)
+        desktop_frame.grid(row=4, column=0, sticky="w", padx=20)
+
+        ctk.CTkButton(
+            desktop_frame, text="Install Desktop Shortcut", width=190,
+            command=self._install_desktop,
+        ).pack(side="left", padx=12, pady=12)
+        self._desktop_status = ctk.CTkLabel(desktop_frame, text="", text_color="gray60")
+        self._desktop_status.pack(side="left", padx=(0, 12))
+
+    def _apply_port(self) -> None:
+        if self._server.is_running:
+            messagebox.showwarning(
+                "Server is running", "Stop the server before changing the port."
+            )
+            self._port_entry.delete(0, "end")
+            self._port_entry.insert(0, str(self._server._port))
+            return
+        raw = self._port_entry.get().strip()
+        try:
+            port = int(raw)
+            if not (1 <= port <= 65535):
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Invalid port", "Enter a number between 1 and 65535.")
+            self._port_entry.delete(0, "end")
+            self._port_entry.insert(0, str(self._server._port))
+            return
+        self._server._port = port
+
+    def _install_desktop(self) -> None:
+        from ._install_desktop import install as _install
+        ok, msg = _install()
+        if ok:
+            self._desktop_status.configure(text=msg)
+            messagebox.showinfo("Shortcut installed", msg)
+        else:
+            messagebox.showerror("Install failed", msg)
+
+
 class App(ctk.CTk):
     """Main application window."""
 
@@ -748,16 +819,19 @@ class App(ctk.CTk):
             pass  # Non-fatal — icon is cosmetic
 
         self._db = Database()
+        self._server = ListServer()
 
         self._tabs = ctk.CTkTabview(self, command=self._on_tab_change)
-        self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 0))
+        self._tabs.pack(fill="both", expand=True, padx=8, pady=(8, 4))
         self._tabs.add("Combine")
         self._tabs.add("Library")
+        self._tabs.add("Settings")
 
         self._combine_tab = CombineTab(
             self._tabs.tab("Combine"),
             self._db,
             switch_to_library_cb=lambda: self._tabs.set("Library"),
+            server=self._server,
         )
         self._combine_tab.pack(fill="both", expand=True)
 
@@ -769,36 +843,17 @@ class App(ctk.CTk):
         )
         self._library_tab.pack(fill="both", expand=True)
 
-        # Footer bar
-        footer = ctk.CTkFrame(self, fg_color="transparent")
-        footer.pack(fill="x", padx=12, pady=(4, 8))
-        self._desktop_status = ctk.CTkLabel(footer, text="", text_color="gray60")
-        self._desktop_status.pack(side="left")
-        ctk.CTkButton(
-            footer,
-            text="Install Desktop Shortcut",
-            width=190,
-            height=28,
-            command=self._install_desktop_shortcut,
-        ).pack(side="right")
+        self._settings_tab = SettingsTab(self._tabs.tab("Settings"), self._server)
+        self._settings_tab.pack(fill="both", expand=True)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-    def _install_desktop_shortcut(self) -> None:
-        from ._install_desktop import install as _install
-        ok, msg = _install()
-        if ok:
-            self._desktop_status.configure(text=msg, text_color="gray60")
-            messagebox.showinfo("Shortcut installed", msg)
-        else:
-            messagebox.showerror("Install failed", msg)
 
     def _on_tab_change(self) -> None:
         if self._tabs.get() == "Library":
             self._library_tab.refresh()
 
     def _on_close(self) -> None:
-        self._combine_tab.stop_server()
+        self._server.stop()
         self._db.close()
         self.destroy()
 
