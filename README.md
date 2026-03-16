@@ -1,4 +1,4 @@
-# Pi-hole Combined Blocklist Generator
+# Block/Allowlist Combiner for Pi-hole
 
 A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blocklists from URLs, local files, or pasted text — then combines them into a single optimized list ready to push directly to Pi-hole.
 
