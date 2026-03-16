@@ -793,8 +793,8 @@ class App(ctk.CTk):
         else:
             messagebox.showerror("Install failed", msg)
 
-    def _on_tab_change(self, tab_name: str) -> None:
-        if tab_name == "Library":
+    def _on_tab_change(self) -> None:
+        if self._tabs.get() == "Library":
             self._library_tab.refresh()
 
     def _on_close(self) -> None:
