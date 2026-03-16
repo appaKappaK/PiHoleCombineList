@@ -13,6 +13,28 @@ from typing import Optional
 # Matches any http/https URL in arbitrary text (e.g. Pi-hole dashboard paste)
 _URL_RE = re.compile(r'https?://\S+')
 
+# Extracts the username segment from GitHub / raw.githubusercontent URLs
+_GITHUB_USER_RE = re.compile(r'https?://(?:raw\.githubusercontent|github)\.com/([^/]+)/')
+
+# Characters/words that are noise when extracting credit text from a pasted table row
+_NOISE_RE = re.compile(r'[✓✗☑☐✔✘]|\b(enabled|disabled|true|false|yes|no)\b', re.I)
+
+
+def _credit_for_url(url: str, line: str) -> Optional[str]:
+    """Return a credit name for *url* by examining *line* or the URL itself."""
+    # 1. Strip the URL and table noise from the line; whatever remains is the credit
+    remaining = _URL_RE.sub('', line)
+    remaining = _NOISE_RE.sub(' ', remaining)
+    remaining = re.sub(r'\s+', ' ', remaining).strip(' \t|,;')
+    remaining = re.sub(r'^\d+\s*|\s*\d+$', '', remaining).strip()  # leading/trailing IDs
+    if len(remaining) > 2:
+        return remaining
+    # 2. Fall back to GitHub username extracted from the URL
+    m = _GITHUB_USER_RE.search(url)
+    if m:
+        return m.group(1)
+    return None
+
 import customtkinter as ctk
 
 from . import __version__
@@ -109,6 +131,9 @@ class CombineTab(ctk.CTkFrame):
         self._switch_to_library = switch_to_library_cb
         self._server = server
         self._list_type_var = list_type_var
+
+        # url → credit name, populated by _extract_urls()
+        self._url_credits: dict[str, str] = {}
 
         # List of (label, content_or_None) tuples.
         # content is None for URL/file paths (fetched on combine); str for pasted text.
@@ -275,17 +300,26 @@ class CombineTab(ctk.CTkFrame):
         self._refresh_sources_list()
 
     def _extract_urls(self) -> None:
-        """Extract all http/https URLs from the paste box and add as URL sources."""
+        """Extract all http/https URLs from the paste box and add as URL sources.
+
+        Also records a credit name for each URL (from surrounding line text or
+        the GitHub username in the URL) for inclusion in the combined list header.
+        """
         text = self._paste_box.get("1.0", "end")
-        urls = _URL_RE.findall(text)
-        if not urls:
+        added = 0
+        for line in text.splitlines():
+            for url in _URL_RE.findall(line):
+                credit = _credit_for_url(url, line)
+                if credit:
+                    self._url_credits[url] = credit
+                self._sources.append((url, None))
+                added += 1
+        if not added:
             messagebox.showinfo("No URLs found", "No http/https URLs were found in the pasted text.")
             return
-        for url in urls:
-            self._sources.append((url, None))
         self._paste_box.delete("1.0", "end")
         self._refresh_sources_list()
-        messagebox.showinfo("URLs added", f"Added {len(urls)} URL(s) as sources.")
+        messagebox.showinfo("URLs added", f"Added {added} URL(s) as sources.")
 
     def _refresh_sources_list(self) -> None:
         for widget in self._sources_frame.winfo_children():
@@ -344,7 +378,12 @@ class CombineTab(ctk.CTkFrame):
                 else:
                     failed_sources.append(label)
 
-        result = combiner.get_combined(list_type=self._list_type_var.get())
+        # Collect credits only for sources still present in the run
+        active_labels = {label for label, _ in self._sources}
+        credits = list(dict.fromkeys(
+            name for url, name in self._url_credits.items() if url in active_labels
+        ))
+        result = combiner.get_combined(list_type=self._list_type_var.get(), credits=credits or None)
         stats = combiner.get_stats()
 
         self._last_result = result

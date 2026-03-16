@@ -3,6 +3,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from .deduplicator import Deduplicator
 from .parser import ListParser
@@ -33,7 +34,8 @@ class ListCombiner:
         self._lists_processed += 1
         return self._dedup.count - before
 
-    def get_combined(self, include_header: bool = True, list_type: str = "Blocklist") -> str:
+    def get_combined(self, include_header: bool = True, list_type: str = "Blocklist",
+                     credits: Optional[list] = None) -> str:
         """Return the full combined list as a string, sorted alphabetically."""
         lines = []
 
@@ -44,8 +46,10 @@ class ListCombiner:
                 f"# Unique domains: {self._dedup.count}",
                 f"# Duplicates removed: {self._dedup.duplicates}",
                 f"# Lists combined: {self._lists_processed}",
-                "",
             ]
+            if credits:
+                lines.append(f"# Credits: {', '.join(credits)}")
+            lines.append("")
 
         lines.extend(sorted(self._dedup.domains))
         return "\n".join(lines)
