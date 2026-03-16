@@ -17,7 +17,8 @@ A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blo
 - Progress bar and per-source status during combine
 - Save combined lists to a local library organized in folders
 - Load saved lists back into the combiner to merge with new sources
-- **Serve List** — hosts the combined list over HTTP on your LAN so Pi-hole can pull it directly via gravity
+- **Serve List** — hosts combined lists over HTTP on your LAN so Pi-hole can pull them directly via gravity; name each served file (e.g. `general.txt`, `tvs.txt`) so multiple lists can be served simultaneously at different URLs for Pi-hole group management
+- **Serve from Library** — serve any saved list directly from the Library tab without re-combining
 - Dark mode desktop GUI (customtkinter)
 - Window and taskbar icon
 - Install desktop shortcut / launcher entry (Linux)
@@ -45,12 +46,15 @@ The app opens with three tabs:
 ### Pushing to Pi-hole
 
 1. Build your combined list in the Combine tab
-2. Click **Serve List** — the `●` indicator turns green and a URL appears (e.g. `http://YOUR.IP.GO.HERE:8765/blocklist.txt`)
-3. Copy the URL and paste it into Pi-hole's **Adlists** page
-4. Run **Update Gravity** in Pi-hole — it fetches and caches the list
-5. Click **Stop Serving** or close the app — Pi-hole retains the list from its gravity cache
+2. Optionally type a filename (e.g. `general`) — leave blank for the default `blocklist.txt`
+3. Click **Serve List** — the `●` indicator turns green and a URL appears (e.g. `http://YOUR.IP.GO.HERE:8765/general.txt`)
+4. Copy the URL and paste it into Pi-hole's **Adlists** page
+5. Run **Update Gravity** in Pi-hole — it fetches and caches the list
+6. Click **Stop Serving** or close the app — Pi-hole retains the list from its gravity cache
 
 > Pi-hole and your PC just need to be on the same local network. The server defaults to port **8765**.
+
+> **Tip:** To use Pi-hole's group management, build separate lists (e.g. one for general devices, one for smart TVs) and serve each with a different filename. Each URL is a separate adlist entry in Pi-hole that can be assigned to different groups.
 
 ### Output format
 
@@ -106,6 +110,7 @@ tests/
   test_fetcher.py
   test_combiner.py
   test_database.py
+  test_server.py
 ```
 
 ## Data storage
@@ -134,6 +139,11 @@ pytest tests/
 - `http.server` / `socket` (Python stdlib — no extra install needed for Serve List)
 
 ## Recent updates
+
+**v1.7.0**
+- **Multi-path serving** — the HTTP server now supports serving multiple lists simultaneously at different URL paths; enables Pi-hole group management with separate lists per device group
+- **Custom serve filename** — name the served file in the Combine tab (e.g. `general` → `/general.txt`) instead of the fixed `/blocklist.txt`
+- **Serve from Library** — serve any saved list directly from the Library tab with its own URL, without needing to re-combine
 
 **v1.6.0**
 - **Settings persistence** — port and Blocklist/Allowlist choice now saved to the local database; restored automatically on next launch

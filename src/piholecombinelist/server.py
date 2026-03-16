@@ -1,5 +1,5 @@
-"""Minimal HTTP server that serves the combined blocklist as plain text."""
-# v1.0.0
+"""Minimal HTTP server that serves combined blocklists as plain text."""
+# v1.7.0
 
 import http.server
 import socket
@@ -25,7 +25,7 @@ class _ReuseAddrServer(socketserver.TCPServer):
 
 
 class ListServer:
-    """Serves a blocklist as plain text over HTTP on /blocklist.txt."""
+    """Serves one or more blocklists as plain text over HTTP on distinct paths."""
 
     DEFAULT_PORT = 8765
 
@@ -33,21 +33,55 @@ class ListServer:
         self._port = port
         self._server: Optional[_ReuseAddrServer] = None
         self._thread: Optional[threading.Thread] = None
+        self._paths: dict[str, bytes] = {}
 
     @property
     def is_running(self) -> bool:
         return self._server is not None
 
-    def start(self, content: str) -> str:
-        """Start serving *content*. Returns the URL to add to Pi-hole's Adlists."""
-        if self._server:
-            self.stop()
+    # ── Public API ────────────────────────────────────────────────
 
-        payload = content.encode("utf-8")
+    def add_path(self, path: str, content: str) -> str:
+        """Register *path* with *content*. Starts the server if needed.
+
+        Returns the full URL for that path.
+        """
+        self._paths[path] = content.encode("utf-8")
+        if not self._server:
+            self._start_server()
+        return f"http://{_local_ip()}:{self._port}{path}"
+
+    def remove_path(self, path: str) -> None:
+        """Remove *path*. Stops the server when no paths remain."""
+        self._paths.pop(path, None)
+        if not self._paths:
+            self._stop_server()
+
+    def start(self, content: str) -> str:
+        """Compatibility wrapper: serve *content* at ``/blocklist.txt``."""
+        return self.add_path("/blocklist.txt", content)
+
+    def stop(self) -> None:
+        """Full shutdown: clear all paths and stop the server."""
+        self._paths.clear()
+        self._stop_server()
+
+    def has_path(self, path: str) -> bool:
+        return path in self._paths
+
+    def url_for(self, path: str) -> str:
+        """Return the full URL for an already-registered *path*."""
+        return f"http://{_local_ip()}:{self._port}{path}"
+
+    # ── Internal ──────────────────────────────────────────────────
+
+    def _start_server(self) -> None:
+        paths = self._paths  # reference — handler always sees latest entries
 
         class _Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802
-                if self.path in ("/", "/blocklist.txt"):
+                payload = paths.get(self.path)
+                if payload is not None:
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain; charset=utf-8")
                     self.send_header("Content-Length", str(len(payload)))
@@ -65,9 +99,8 @@ class ListServer:
             target=self._server.serve_forever, daemon=True, name="phlist-server"
         )
         self._thread.start()
-        return f"http://{_local_ip()}:{self._port}/blocklist.txt"
 
-    def stop(self) -> None:
+    def _stop_server(self) -> None:
         if self._server:
             self._server.shutdown()
             self._server.server_close()

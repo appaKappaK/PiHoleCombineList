@@ -67,6 +67,7 @@ class App(ctk.CTk):
             self._db,
             get_combine_tab_cb=lambda: self._combine_tab,
             switch_to_combine_cb=lambda: self._tabs.set("Combine"),
+            server=self._server,
         )
         self._library_tab.pack(fill="both", expand=True)
 

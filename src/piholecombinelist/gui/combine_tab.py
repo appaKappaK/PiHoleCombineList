@@ -142,6 +142,10 @@ class CombineTab(ctk.CTkFrame):
         self._server = server
         self._list_type_var = list_type_var
 
+        # Whether the Combine tab is currently serving; tracks the active path
+        self._serving: bool = False
+        self._serving_path: str = ""
+
         # url → credit name, populated by _extract_urls()
         self._url_credits: dict[str, str] = {}
 
@@ -276,6 +280,13 @@ class CombineTab(ctk.CTkFrame):
             serve_row, text="Serve List", width=110, command=self._toggle_serve
         )
         self._serve_btn.pack(side="left", padx=(0, 8))
+        self._serve_name_entry = ctk.CTkEntry(
+            serve_row, placeholder_text="blocklist", width=120
+        )
+        self._serve_name_entry.pack(side="left", padx=(0, 4))
+        ctk.CTkLabel(serve_row, text=".txt", text_color="gray60").pack(
+            side="left", padx=(0, 8)
+        )
         self._serve_url_var = ctk.StringVar()
         self._serve_url_entry = ctk.CTkEntry(
             serve_row, textvariable=self._serve_url_var, width=280, state="disabled",
@@ -473,11 +484,25 @@ class CombineTab(ctk.CTkFrame):
 
     # ── Serve over HTTP ──────────────────────────────────────────────
 
+    def _serve_path_from_name(self) -> str:
+        """Build a URL path from the filename entry, defaulting to ``/blocklist.txt``."""
+        raw = self._serve_name_entry.get().strip()
+        if not raw:
+            return "/blocklist.txt"
+        # Strip .txt if user typed it, we add it ourselves
+        if raw.lower().endswith(".txt"):
+            raw = raw[:-4]
+        slug = re.sub(r'[^a-zA-Z0-9_-]+', '-', raw).strip('-')
+        return f"/{slug or 'blocklist'}.txt"
+
     def _toggle_serve(self) -> None:
-        if self._server.is_running:
-            self._server.stop()
+        if self._serving:
+            self._server.remove_path(self._serving_path)
+            self._serving = False
+            self._serving_path = ""
             self._serve_indicator.configure(text_color="#C0392B")
             self._serve_btn.configure(text="Serve List", fg_color=["#3B8ED0", "#1F6AA5"])
+            self._serve_name_entry.configure(state="normal")
             self._serve_url_entry.pack_forget()
             self._serve_copy_btn.pack_forget()
         else:
@@ -485,12 +510,16 @@ class CombineTab(ctk.CTkFrame):
             if not content:
                 messagebox.showwarning("Nothing to serve", "Combine sources first.")
                 return
+            path = self._serve_path_from_name()
             try:
-                url = self._server.start(content)
+                url = self._server.add_path(path, content)
             except OSError as exc:
                 messagebox.showerror("Server error", f"Could not start server:\n{exc}")
                 return
+            self._serving = True
+            self._serving_path = path
             self._serve_url_var.set(url)
+            self._serve_name_entry.configure(state="disabled")
             self._serve_url_entry.pack(side="left", padx=(0, 8))
             self._serve_copy_btn.pack(side="left")
             self._serve_indicator.configure(text_color="#27AE60")

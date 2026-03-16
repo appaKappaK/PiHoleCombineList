@@ -1,6 +1,7 @@
 """Library tab: browse folders and saved lists, load back into combiner."""
 
 import json
+import re as _re
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 from typing import Optional
@@ -8,18 +9,31 @@ from typing import Optional
 import customtkinter as ctk
 
 from ..database import Database
+from ..server import ListServer
+
+
+def _slugify(name: str) -> str:
+    """Convert a list name to a URL-safe path component."""
+    slug = name.lower()
+    slug = _re.sub(r'[^a-z0-9]+', '-', slug)
+    slug = slug.strip('-')
+    return slug or "list"
 
 
 class LibraryTab(ctk.CTkFrame):
     """The Library tab: browse folders and saved lists, load back into combiner."""
 
-    def __init__(self, parent, db: Database, get_combine_tab_cb, switch_to_combine_cb) -> None:
+    def __init__(self, parent, db: Database, get_combine_tab_cb, switch_to_combine_cb,
+                 server: ListServer) -> None:
         super().__init__(parent, fg_color="transparent")
         self._db = db
         self._get_combine_tab = get_combine_tab_cb
         self._switch_to_combine = switch_to_combine_cb
+        self._server = server
         self._selected_folder_id: Optional[int] = None  # None = root
         self._selected_list_id: Optional[int] = None
+        # list_id → URL path currently being served (e.g. "/my-general-list.txt")
+        self._served_paths: dict[int, str] = {}
 
         self._build_ui()
         self.refresh()
@@ -104,7 +118,7 @@ class LibraryTab(ctk.CTkFrame):
 
         # Move-to row
         move_row = ctk.CTkFrame(right, fg_color="transparent")
-        move_row.grid(row=4, column=0, sticky="ew", padx=10, pady=(0, 10))
+        move_row.grid(row=4, column=0, sticky="ew", padx=10, pady=(0, 4))
         ctk.CTkLabel(move_row, text="Move to folder:").pack(side="left", padx=(0, 8))
         self._move_folder_var = ctk.StringVar(value="🏠 Root")
         self._move_menu = ctk.CTkOptionMenu(
@@ -114,6 +128,26 @@ class LibraryTab(ctk.CTkFrame):
         ctk.CTkButton(move_row, text="Move", width=70, command=self._move_list).pack(
             side="left"
         )
+
+        # Serve row — host a saved list over HTTP for Pi-hole
+        serve_row = ctk.CTkFrame(right, fg_color="transparent")
+        serve_row.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 10))
+        self._lib_serve_indicator = ctk.CTkLabel(
+            serve_row, text="●", text_color="#C0392B", width=16
+        )
+        self._lib_serve_indicator.pack(side="left", padx=(0, 4))
+        self._lib_serve_btn = ctk.CTkButton(
+            serve_row, text="Serve", width=90, command=self._toggle_lib_serve
+        )
+        self._lib_serve_btn.pack(side="left", padx=(0, 8))
+        self._lib_serve_url_var = ctk.StringVar()
+        self._lib_serve_url_entry = ctk.CTkEntry(
+            serve_row, textvariable=self._lib_serve_url_var, width=280, state="disabled",
+        )
+        self._lib_serve_copy_btn = ctk.CTkButton(
+            serve_row, text="Copy URL", width=80, command=self._copy_lib_serve_url
+        )
+        # URL entry + copy button hidden until a list is being served
 
     # ── Refresh helpers ──────────────────────────────────────────────
 
@@ -232,12 +266,27 @@ class LibraryTab(ctk.CTkFrame):
         self._lib_dupes_label.configure(
             text=f"Duplicates removed: {row['duplicates_removed']}"
         )
+        # Reflect serve state for this list
+        if list_id in self._served_paths:
+            self._lib_serve_indicator.configure(text_color="#27AE60")
+            self._lib_serve_btn.configure(text="Stop Serving", fg_color=["#C0392B", "#922B21"])
+            self._lib_serve_url_var.set(self._server.url_for(self._served_paths[list_id]))
+            self._lib_serve_url_entry.pack(side="left", padx=(0, 8))
+            self._lib_serve_copy_btn.pack(side="left")
+        else:
+            self._lib_serve_indicator.configure(text_color="#C0392B")
+            self._lib_serve_btn.configure(text="Serve", fg_color=["#3B8ED0", "#1F6AA5"])
+            self._lib_serve_url_entry.pack_forget()
+            self._lib_serve_copy_btn.pack_forget()
 
     def _delete_list(self) -> None:
         if self._selected_list_id is None:
             messagebox.showinfo("Select a list", "Select a list to delete.")
             return
         if messagebox.askyesno("Delete list", "Delete this list?", parent=self):
+            # Stop serving this list if it's active
+            if self._selected_list_id in self._served_paths:
+                self._server.remove_path(self._served_paths.pop(self._selected_list_id))
             self._db.delete_list(self._selected_list_id)
             self._selected_list_id = None
             self._content_box.configure(state="normal")
@@ -284,6 +333,52 @@ class LibraryTab(ctk.CTkFrame):
         else:
             combine_tab.load_content_as_source(f"[library] {row['name']}", row["content"])
         self._switch_to_combine()
+
+    # ── Serve from Library ─────────────────────────────────────────
+
+    def _make_path(self, list_id: int, name: str) -> str:
+        """Return a unique ``/slug.txt`` path for *list_id*, avoiding collisions."""
+        base = _slugify(name)
+        candidate = f"/{base}.txt"
+        for lid, p in self._served_paths.items():
+            if p == candidate and lid != list_id:
+                candidate = f"/{base}-{list_id}.txt"
+                break
+        return candidate
+
+    def _toggle_lib_serve(self) -> None:
+        if self._selected_list_id is None:
+            messagebox.showinfo("Select a list", "Select a list to serve.")
+            return
+        lid = self._selected_list_id
+        if lid in self._served_paths:
+            # Stop serving this list
+            self._server.remove_path(self._served_paths.pop(lid))
+            self._lib_serve_indicator.configure(text_color="#C0392B")
+            self._lib_serve_btn.configure(text="Serve", fg_color=["#3B8ED0", "#1F6AA5"])
+            self._lib_serve_url_entry.pack_forget()
+            self._lib_serve_copy_btn.pack_forget()
+        else:
+            row = self._db.get_list(lid)
+            if not row:
+                return
+            path = self._make_path(lid, row["name"])
+            try:
+                url = self._server.add_path(path, row["content"])
+            except OSError as exc:
+                messagebox.showerror("Server error", f"Could not start server:\n{exc}")
+                return
+            self._served_paths[lid] = path
+            self._lib_serve_url_var.set(url)
+            self._lib_serve_url_entry.pack(side="left", padx=(0, 8))
+            self._lib_serve_copy_btn.pack(side="left")
+            self._lib_serve_indicator.configure(text_color="#27AE60")
+            self._lib_serve_btn.configure(text="Stop Serving", fg_color=["#C0392B", "#922B21"])
+
+    def _copy_lib_serve_url(self) -> None:
+        self.clipboard_clear()
+        self.clipboard_append(self._lib_serve_url_var.get())
+        messagebox.showinfo("Copied", "URL copied — paste it into Pi-hole's Adlists page,\nthen run gravity.")
 
     def _move_list(self) -> None:
         if self._selected_list_id is None:
