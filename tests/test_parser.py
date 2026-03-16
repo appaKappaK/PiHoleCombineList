@@ -63,3 +63,31 @@ def test_invalid_domain_no_tld(parser):
 
 def test_subdomain(parser):
     assert parser.parse_line("sub.domain.example.co.uk") == "sub.domain.example.co.uk"
+
+
+# ABP/AdGuard format (||domain^)
+
+def test_abp_rule_basic(parser):
+    assert parser.parse_line("||example.com^") == "example.com"
+
+
+def test_abp_rule_with_options(parser):
+    assert parser.parse_line("||example.com^$third-party") == "example.com"
+
+
+def test_abp_rule_with_path(parser):
+    assert parser.parse_line("||example.com/ads^") == "example.com"
+
+
+def test_abp_rule_subdomain(parser):
+    assert parser.parse_line("||ads.example.co.uk^") == "ads.example.co.uk"
+
+
+def test_single_pipe_skipped(parser):
+    assert parser.parse_line("|http://example.com|") is None
+
+
+# Pipe delimiter in plain domain lines
+
+def test_pipe_delimiter_stripped(parser):
+    assert parser.parse_line("bad-site.org | ") == "bad-site.org"
