@@ -110,11 +110,14 @@ tests/
 
 ## Data storage
 
-The library database is stored at:
+| Path | Contents | Created by |
+|------|----------|------------|
+| `~/.db/piholecombinelist.db` | Library (folders, saved lists, settings) | App on first launch |
+| `~/.local/share/applications/piholecombinelist.desktop` | Launcher entry | `phlist-desktop` / Settings tab |
+| `~/.local/share/icons/hicolor/scalable/apps/piholecombinelist.svg` | SVG icon | `phlist-desktop` / Settings tab |
+| `~/.local/share/icons/hicolor/256x256/apps/piholecombinelist.png` | PNG icon | `phlist-desktop` / Settings tab |
 
-```
-~/.db/piholecombinelist.db
-```
+The desktop shortcut files are only created if you run the desktop installer — the app itself only writes the database.
 
 ## Running tests
 
