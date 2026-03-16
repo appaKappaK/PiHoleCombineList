@@ -26,10 +26,10 @@ class SaveToLibraryDialog(ctk.CTkToplevel):
 
     def __init__(self, parent, db: Database) -> None:
         super().__init__(parent)
+        self.transient(parent)
         self.title("Save to Library")
         self.geometry("360x200")
         self.resizable(False, False)
-        self.grab_set()
 
         self.result_name: Optional[str] = None
         self.result_folder_id: Optional[int] = None
@@ -51,6 +51,12 @@ class SaveToLibraryDialog(ctk.CTkToplevel):
         ctk.CTkButton(self, text="Save", command=self._on_save, width=320).pack(
             padx=20, pady=16
         )
+
+        # Flush draw queue before grabbing events — prevents black window on Linux
+        self.update_idletasks()
+        self.lift()
+        self.focus_force()
+        self.grab_set()
 
     def _on_save(self) -> None:
         name = self._name_entry.get().strip()
