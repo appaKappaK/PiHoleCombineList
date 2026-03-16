@@ -10,13 +10,16 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 from typing import Optional
 
-# Matches any http/https URL in arbitrary text (e.g. Pi-hole dashboard paste)
-_URL_RE = re.compile(r'https?://\S+')
+# Matches any http/https URL in arbitrary text (e.g. Pi-hole dashboard paste).
+# Excludes backtick, pipe, and angle-bracket characters that appear in markdown
+# table formatting but are never valid unencoded URL characters.
+_URL_RE = re.compile(r'https?://[^\s`|<>"\']+')
 
 # Extracts the username/author from common code-hosting URL patterns
 _FORGE_USER_RE = re.compile(
     r'https?://(?:'
-    r'(?:raw\.githubusercontent|github)\.com/([^/]+)/'  # github.com / raw
+    r'(?:raw\.githubusercontent|github)\.com/([^/]+)/'   # github.com / raw
+    r'|cdn\.jsdelivr\.net/gh/([^/]+)/'                   # jsDelivr GitHub CDN
     r'|([^./]+)\.(?:github|gitlab)\.io/'                  # username.github.io / username.gitlab.io
     r'|gitlab\.com/([^/]+)/'                             # gitlab.com
     r'|bitbucket\.org/([^/]+)/'                          # bitbucket.org
@@ -29,12 +32,17 @@ _NOISE_RE = re.compile(r'[✓✗☑☐✔✘]|\b(enabled|disabled|true|false|yes
 
 def _credit_for_url(url: str, line: str) -> Optional[str]:
     """Return a credit name for *url* by examining *line* or the URL itself."""
-    # 1. Strip the URL and table noise from the line; whatever remains is the credit
+    # 1. Strip the URL and table/markdown noise from the line
     remaining = _URL_RE.sub('', line)
     remaining = _NOISE_RE.sub(' ', remaining)
+    remaining = re.sub(r'[`*_]', '', remaining)          # strip markdown formatting chars
     remaining = re.sub(r'\s+', ' ', remaining).strip(' \t|,;')
     remaining = re.sub(r'^\d+\s*|\s*\d+$', '', remaining).strip()  # leading/trailing IDs
-    if len(remaining) > 2:
+    # Accept line text only if it looks like a name/tag (≤ 5 words) rather
+    # than a description sentence from a markdown table or comment block.
+    # Count actual word tokens (split on spaces AND hyphens) so hyphenated
+    # descriptors like "low-malware-false-positive" don't sneak past the limit.
+    if remaining and len(re.findall(r'\b\w+\b', remaining)) <= 5:
         return remaining
     # 2. Fall back to username extracted from known code-hosting URL patterns
     m = _FORGE_USER_RE.search(url)
