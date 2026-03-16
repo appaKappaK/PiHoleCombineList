@@ -23,6 +23,8 @@ _FORGE_USER_RE = re.compile(
     r'|([^./]+)\.(?:github|gitlab)\.io/'                  # username.github.io / username.gitlab.io
     r'|gitlab\.com/([^/]+)/'                             # gitlab.com
     r'|bitbucket\.org/([^/]+)/'                          # bitbucket.org
+    r'|codeberg\.org/([^/]+)/'                           # codeberg.org
+    r'|([^./]+)\.codeberg\.page/'                        # username.codeberg.page
     r')'
 )
 
