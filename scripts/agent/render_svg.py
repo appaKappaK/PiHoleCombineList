@@ -10,8 +10,8 @@ Usage:
     SIZE defaults to 128. Produces a SIZExSIZE PNG.
 
 Examples:
-    python scripts/agent/render_svg.py src/piholecombinelist/assets/piholecombinelist.svg splash_logo.png 128
-    python scripts/agent/render_svg.py src/piholecombinelist/assets/piholecombinelist.svg icon_64.png 64
+    python scripts/agent/render_svg.py src/phlist/assets/phlist.svg splash_logo.png 128
+    python scripts/agent/render_svg.py src/phlist/assets/phlist.svg icon_64.png 64
 """
 
 import shutil

@@ -1,7 +1,7 @@
 """Tests for ListCombiner."""
 
 import pytest
-from piholecombinelist.combiner import ListCombiner
+from phlist.combiner import ListCombiner
 
 
 @pytest.fixture
@@ -94,6 +94,20 @@ def test_save_writes_file(combiner, tmp_path):
 def test_clear_resets_state(combiner):
     combiner.add_list("example.com\n")
     combiner.clear()
+    stats = combiner.get_stats()
+    assert stats["unique_domains"] == 0
+    assert stats["duplicates_removed"] == 0
+    assert stats["lists_processed"] == 0
+
+
+def test_get_combined_empty(combiner):
+    """get_combined() on a fresh combiner produces a header but no domain lines."""
+    output = combiner.get_combined()
+    lines = [l for l in output.splitlines() if l and not l.startswith("#")]
+    assert lines == []
+
+
+def test_get_stats_empty(combiner):
     stats = combiner.get_stats()
     assert stats["unique_domains"] == 0
     assert stats["duplicates_removed"] == 0

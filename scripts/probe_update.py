@@ -10,7 +10,7 @@ import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from pathlib import Path
-from piholecombinelist.updater import has_fetchable_sources, update_list
+from phlist.updater import has_fetchable_sources, update_list
 
 # --- EDIT BELOW ---
 

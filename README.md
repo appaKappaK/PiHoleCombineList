@@ -28,7 +28,9 @@ A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blo
 - **Fetch cache** — re-combining after adding a few new sources skips re-downloading previously fetched URLs
 - **Source dedup** — duplicate URLs are blocked on add; sources display sorted alphabetically
 - **Splash screen** — branded loading screen with app logo while the GUI initializes
-- **Logging** — rotating log file at `~/.local/share/piholecombinelist/piholecombinelist.log` for debugging
+- **Logging** — rotating log file at `~/.local/share/phlist/phlist.log` for debugging
+- **Export / Import database** — back up your entire library to a `.db` file and restore it on any machine
+- **Security hardening** — 50 MB response cap, null-byte stripping, SSRF redirect protection, and unicode bidi-override sanitization on saved names
 - Dark mode desktop GUI (customtkinter)
 - Window and taskbar icon
 - Install desktop shortcut / launcher entry (Linux)
@@ -51,7 +53,7 @@ The app opens with three tabs:
 
 - **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, export, or push to Pi-hole
 - **Library** — browse saved lists organized in folders, view contents, export, update from sources, or load back into the combiner
-- **Settings** — Blocklist/Allowlist toggle (switches whether the combined output is labeled as a blocklist or allowlist — use Allowlist mode when combining domain whitelists for Pi-hole's allow list), server port, desktop shortcut installer (all settings persist across restarts)
+- **Settings** — two-column card layout: appearance (Light/Dark/System), server port, list type toggle, combine defaults (timeout + filename), library stats, inline log viewer, desktop shortcut installer, and database export/import — all settings persist across restarts
 
 > **Note:** The Blocklist/Allowlist toggle only changes the output header label — it does not affect how Pi-hole processes the list. Blocklists and allowlists should be added on the **Lists** tab in Pi-hole's dashboard.
 
@@ -103,7 +105,7 @@ This installs the icon and `.desktop` entry so the app appears in your GNOME/KDE
 ## Project structure
 
 ```
-src/piholecombinelist/
+src/phlist/
   gui/
     app.py            — Main window, tab wiring, splash screen
     combine_tab.py    — Combine tab + URL/credit extraction + fetch cache
@@ -145,11 +147,11 @@ scripts/
 
 | Path | Contents | Created by |
 |------|----------|------------|
-| `~/.local/share/piholecombinelist/piholecombinelist.db` | Library (folders, saved lists, settings) | App on first launch |
-| `~/.local/share/piholecombinelist/piholecombinelist.log` | Rotating debug log (1 MB, 1 backup) | App on first launch |
-| `~/.local/share/applications/piholecombinelist.desktop` | Launcher entry | `phlist-desktop` / Settings tab |
-| `~/.local/share/icons/hicolor/scalable/apps/piholecombinelist.svg` | SVG icon | `phlist-desktop` / Settings tab |
-| `~/.local/share/icons/hicolor/256x256/apps/piholecombinelist.png` | PNG icon | `phlist-desktop` / Settings tab |
+| `~/.local/share/phlist/phlist.db` | Library (folders, saved lists, settings) | App on first launch |
+| `~/.local/share/phlist/phlist.log` | Rotating debug log (1 MB, 1 backup) | App on first launch |
+| `~/.local/share/applications/phlist.desktop` | Launcher entry | `phlist-desktop` / Settings tab |
+| `~/.local/share/icons/hicolor/scalable/apps/phlist.svg` | SVG icon | `phlist-desktop` / Settings tab |
+| `~/.local/share/icons/hicolor/256x256/apps/phlist.png` | PNG icon | `phlist-desktop` / Settings tab |
 
 The desktop shortcut files are only created if you run the desktop installer — the app itself only writes the database and log file.
 
@@ -168,15 +170,13 @@ pytest tests/
 - SQLite (Python stdlib)
 - `http.server` / `socket` (Python stdlib — no extra install needed for Host List)
 
-## What's new in v1.8.0
+## What's new in v1.8.3
 
-- **Combine Selected** — Ctrl+click to multi-select lists in the Library and merge them into one
-- **Refresh Credits** — retroactively extract author credits for older saved lists
-- **Fetch cache** — re-combining only downloads newly added sources
-- **Source dedup** — duplicate URLs blocked on add; sources sorted alphabetically
-- **Splash screen** — branded loading screen with app logo
-- **Logging** — rotating debug log at `~/.local/share/piholecombinelist/piholecombinelist.log`
-- **Update List / Update All** — re-fetch sources and update saved lists in one click
-- **Auto-rehost** — hosted content refreshes immediately after an update
+- **Settings tab overhaul** — two-column card layout with visible section borders, library stats panel, inline log viewer, fetch timeout and default filename settings, appearance toggle (Light/Dark/System)
+- **Export / Import database** — back up and restore your entire library as a `.db` file from the Settings tab; import applies live without a restart
+- **Open Data Folder** — one-click access to `~/.local/share/phlist/` from Settings
+- **Security hardening** — 50 MB response size cap, null-byte stripping from fetched content, SSRF protection (redirects to private IPs are rejected), unicode bidi-override and zero-width character sanitization on all saved names
+- **Test suite expanded** — 106 → 123 tests covering previously untested paths and all new security behaviour
+- **Package renamed** `piholecombinelist` → `phlist` — consistent with the CLI command; data directory and database migrate automatically on first launch
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.

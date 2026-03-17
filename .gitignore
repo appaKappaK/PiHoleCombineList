@@ -51,8 +51,8 @@ pip-delete-this-directory.txt
 data/output/
 
 # Keep bundled assets even if other binary rules would catch them
-!src/piholecombinelist/assets/*.png
-!src/piholecombinelist/assets/*.svg
+!src/phlist/assets/*.png
+!src/phlist/assets/*.svg
 
 # Database (stored in ~/.db/ outside the repo)
 *.db

@@ -8,7 +8,7 @@ Edit the SAMPLE_LISTS below, then run:
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from piholecombinelist.combiner import ListCombiner
+from phlist.combiner import ListCombiner
 
 # --- EDIT BELOW ---
 

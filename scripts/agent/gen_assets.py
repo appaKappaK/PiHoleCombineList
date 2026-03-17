@@ -17,14 +17,14 @@ from render_svg import render
 from image_info import info
 
 ASSETS_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "src", "piholecombinelist", "assets"
+    os.path.dirname(__file__), "..", "..", "src", "phlist", "assets"
 )
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "generated")
-SVG_SOURCE = os.path.join(ASSETS_DIR, "piholecombinelist.svg")
+SVG_SOURCE = os.path.join(ASSETS_DIR, "phlist.svg")
 
 # (output_filename, size) — add new entries here when the app needs more sizes
 TARGETS = [
-    ("piholecombinelist.png", 256),   # taskbar / window icon
+    ("phlist.png", 256),   # taskbar / window icon
     ("splash_logo.png", 128),         # splash screen logo
 ]
 
@@ -44,4 +44,4 @@ if __name__ == "__main__":
         info(os.path.join(OUTPUT_DIR, filename))
 
     print()
-    print("To use: copy the files you need into src/piholecombinelist/assets/")
+    print("To use: copy the files you need into src/phlist/assets/")

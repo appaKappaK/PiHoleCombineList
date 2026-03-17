@@ -7,7 +7,7 @@ Usage:
     python scripts/agent/image_info.py IMAGE_PATH [IMAGE_PATH ...]
 
 Examples:
-    python scripts/agent/image_info.py src/piholecombinelist/assets/*.png
+    python scripts/agent/image_info.py src/phlist/assets/*.png
 """
 
 import os

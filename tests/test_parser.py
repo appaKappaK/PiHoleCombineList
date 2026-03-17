@@ -1,7 +1,7 @@
 """Tests for ListParser."""
 
 import pytest
-from piholecombinelist.parser import ListParser
+from phlist.parser import ListParser
 
 
 @pytest.fixture
@@ -91,3 +91,11 @@ def test_single_pipe_skipped(parser):
 
 def test_pipe_delimiter_stripped(parser):
     assert parser.parse_line("bad-site.org | ") == "bad-site.org"
+
+
+def test_empty_string(parser):
+    assert parser.parse_line("") is None
+
+
+def test_tab_whitespace(parser):
+    assert parser.parse_line("\texample.com") == "example.com"

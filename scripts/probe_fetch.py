@@ -8,7 +8,7 @@ Edit the URLS and TEST_FETCH below, then run:
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from piholecombinelist.fetcher import ListFetcher
+from phlist.fetcher import ListFetcher
 
 # --- EDIT BELOW ---
 

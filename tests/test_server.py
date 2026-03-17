@@ -6,8 +6,8 @@ import urllib.error
 
 import pytest
 
-from piholecombinelist.server import ListServer
-from piholecombinelist.gui.library_tab import _slugify
+from phlist.server import ListServer
+from phlist.gui.library_tab import _slugify
 
 
 # Use a high port to avoid conflicts

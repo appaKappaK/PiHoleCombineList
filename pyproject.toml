@@ -3,8 +3,8 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "piholecombinelist"
-version = "1.8.1"
+name = "phlist"
+version = "1.8.3"
 requires-python = ">=3.9"
 dependencies = [
     "requests>=2.28.0",
@@ -13,11 +13,11 @@ dependencies = [
 ]
 
 [project.scripts]
-phlist = "piholecombinelist.gui:main"
-phlist-desktop = "piholecombinelist._install_desktop:main"
+phlist = "phlist.gui:main"
+phlist-desktop = "phlist._install_desktop:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-piholecombinelist = ["assets/*"]
+phlist = ["assets/*"]

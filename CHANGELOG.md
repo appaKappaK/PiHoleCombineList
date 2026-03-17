@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.8.3] - 2026-03-17
+
+### Added
+- **Settings tab overhaul** — two-column card layout with visible bordered cards for each section; cards: LIST TYPE, SERVER, DESKTOP, COMBINE DEFAULTS (timeout + filename), APPEARANCE, LIBRARY stats, LOG viewer, DATA
+- **Export Database** — saves a backup copy of `phlist.db` to any location via file dialog
+- **Import Database** — restores a backup live into the running app using SQLite's backup API; Library tab refreshes immediately, no restart needed
+- **Open Data Folder** — opens `~/.local/share/phlist/` in the system file manager from the Settings tab
+- **Security — SSRF protection** — `fetch_url()` now rejects responses whose final URL (after redirect) resolves to a private or loopback IP address
+- **Security — response size cap** — fetched responses exceeding 50 MB (via `Content-Length` header or actual body size) are rejected to prevent memory exhaustion
+- **Security — null-byte stripping** — null bytes (`\x00`) are removed from all fetched content before parsing or storage
+- **Security — unicode sanitization** — bidi-override characters (U+202A–U+202E, U+2066–U+2069) and zero-width characters (U+200B–U+200D, U+FEFF) are stripped from folder names, list names, and other user-supplied strings on write
+- **Test suite expanded** — 106 → 123 tests; new coverage: `rename_list`, sort-order verification, empty-combiner edge cases, deduplicator case-sensitivity, empty-file fetch, mocked URL success, all four security hardening paths, parser edge cases, updater edge case
+
+### Changed
+- Settings tab library stats now displayed in a compact 2×2 grid (was 4 stacked labels)
+- DATA card buttons renamed "Export Database…" / "Import Database…" (previously stubs labeled "Export Library…" / "Import Library…")
+
+## [1.8.2] - 2026-03-17
+
+### Changed
+- Internal package renamed from `piholecombinelist` to `phlist` — consistent with the CLI
+  command; data directory, database, and log file all migrate automatically on first launch
+- `pyproject.toml` package name updated to `phlist`; entry points and asset references updated
+
 ## [1.8.1] - 2026-03-17
 
 ### Added

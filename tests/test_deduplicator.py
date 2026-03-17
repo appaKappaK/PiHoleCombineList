@@ -1,7 +1,7 @@
 """Unit tests for Deduplicator."""
 
 import pytest
-from piholecombinelist.deduplicator import Deduplicator
+from phlist.deduplicator import Deduplicator
 
 
 def test_add_new_domain():
@@ -72,4 +72,13 @@ def test_add_after_clear():
     d.clear()
     assert d.add("a.com") is True
     assert d.count == 1
+    assert d.duplicates == 0
+
+
+def test_case_sensitivity():
+    """Deduplicator is case-sensitive by design — the parser lowercases before add()."""
+    d = Deduplicator()
+    d.add("example.com")
+    d.add("Example.COM")  # different string — counted as a new unique entry
+    assert d.count == 2
     assert d.duplicates == 0

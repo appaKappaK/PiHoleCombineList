@@ -44,7 +44,7 @@ class _SplashScreen(ctk.CTkToplevel):
         # Load the larger splash logo
         try:
             from PIL import Image
-            logo_path = _ir.files("piholecombinelist") / "assets" / "splash_logo.png"
+            logo_path = _ir.files("phlist") / "assets" / "splash_logo.png"
             pil_img = Image.open(str(logo_path))
             self._logo = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(128, 128))
             ctk.CTkLabel(self, image=self._logo, text="", fg_color=_SPLASH_BG).pack(pady=(24, 8))
@@ -119,7 +119,7 @@ class App(ctk.CTk):
         # Set window/taskbar icon
         self._icon = None
         try:
-            _png = (_ir.files("piholecombinelist") / "assets" / "piholecombinelist.png").read_bytes()
+            _png = (_ir.files("phlist") / "assets" / "phlist.png").read_bytes()
             self._icon = _tk.PhotoImage(data=base64.b64encode(_png).decode())
             self.iconphoto(True, self._icon)
         except Exception:
@@ -175,6 +175,7 @@ class App(ctk.CTk):
             self._server,
             self._list_type_var,
             db=self._db,
+            refresh_library_cb=lambda: self._library_tab.refresh(),
         )
         self._settings_tab.pack(fill="both", expand=True)
 

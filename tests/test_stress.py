@@ -5,9 +5,9 @@ These are headless tests — no GUI, no X11 — safe for CI.
 
 import json
 import pytest
-from piholecombinelist.combiner import ListCombiner
-from piholecombinelist.gui.combine_tab import _DISPLAY_LIMIT
-from piholecombinelist.updater import update_list
+from phlist.combiner import ListCombiner
+from phlist.gui.combine_tab import _DISPLAY_LIMIT
+from phlist.updater import update_list
 
 
 def _generate_domains(prefix: str, count: int) -> str:

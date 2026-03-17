@@ -1,9 +1,11 @@
 """Fetch blocklist content from URLs or local files."""
-# v1.1.2
+# v1.1.3
 
+import ipaddress
 import logging
 import re
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +20,20 @@ _GITHUB_BLOB_RE = re.compile(
     r'^https?://github\.com/([^/]+/[^/]+)/blob/(.+)$'
 )
 
+# Maximum response body accepted (50 MB). Larger responses are rejected to
+# prevent memory exhaustion from malicious or runaway list servers.
+_MAX_FETCH_BYTES = 50 * 1024 * 1024
+
 from . import __version__
+
+
+def _is_private_url(url: str) -> bool:
+    """Return True if *url* resolves to a private/loopback IP address literal."""
+    host = urllib.parse.urlparse(url).hostname or ""
+    try:
+        return ipaddress.ip_address(host).is_private
+    except ValueError:
+        return False  # hostname string — not a bare IP, can't classify here
 
 
 class ListFetcher:
@@ -53,7 +68,35 @@ class ListFetcher:
         try:
             response = self._session.get(url, timeout=self.timeout)
             response.raise_for_status()
+
+            # Reject redirect to private/loopback IP (SSRF defence)
+            if response.url != url and _is_private_url(response.url):
+                _log.warning("Rejected redirect to private address: %s → %s", url, response.url)
+                self.failed += 1
+                return None
+
+            # Reject oversized responses (Content-Length header check)
+            cl = response.headers.get("Content-Length")
+            if cl:
+                try:
+                    if int(cl) > _MAX_FETCH_BYTES:
+                        _log.warning("Skipping %s — Content-Length %s exceeds limit", url, cl)
+                        self.failed += 1
+                        return None
+                except ValueError:
+                    pass  # malformed header; proceed and check body size below
+
             content = response.text
+
+            # Reject oversized body (no Content-Length or compressed response)
+            if len(content.encode()) > _MAX_FETCH_BYTES:
+                _log.warning("Skipping %s — response body exceeds size limit", url)
+                self.failed += 1
+                return None
+
+            # Strip null bytes — undefined behaviour in Tkinter / some SQLite builds
+            content = content.replace("\x00", "")
+
             self.successful += 1
             self.total_bytes += len(content.encode())
             _log.info("Fetched %d bytes from %s", len(content.encode()), url)

@@ -8,7 +8,7 @@ Edit the SAMPLES below, then run:
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from piholecombinelist.gui.combine_tab import _credit_for_url
+from phlist.gui.combine_tab import _credit_for_url
 
 # --- EDIT BELOW ---
 

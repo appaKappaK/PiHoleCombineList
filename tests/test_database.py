@@ -1,7 +1,10 @@
 """Tests for Database (SQLite library)."""
 
+import shutil
+import sqlite3
+
 import pytest
-from piholecombinelist.database import Database
+from phlist.database import Database
 
 
 @pytest.fixture
@@ -144,3 +147,110 @@ def test_get_library_stats_with_data(db):
     assert stats["list_count"] == 2
     assert stats["total_domains"] == 3
     assert stats["db_bytes"] > 0
+
+
+# ── Export / Import (mirrors what SettingsTab does) ───────────────────
+
+
+def test_export_db_produces_valid_copy(db, tmp_path):
+    """shutil.copy2 of _path produces a readable database with the same data."""
+    db.create_folder("Ads")
+    db.save_list("my-list", "example.com\n", 1, 0)
+
+    backup_path = tmp_path / "backup.db"
+    shutil.copy2(db._path, backup_path)
+
+    restored = Database(db_path=backup_path)
+    try:
+        assert len(restored.get_folders()) == 1
+        assert restored.get_folders()[0]["name"] == "Ads"
+        assert len(restored.get_all_lists()) == 1
+        assert restored.get_all_lists()[0]["name"] == "my-list"
+    finally:
+        restored.close()
+
+
+def test_import_db_replaces_live_connection(db, tmp_path):
+    """sqlite3 backup() restores a backup into the live connection."""
+    # Set up the backup source
+    src_db = Database(db_path=tmp_path / "source.db")
+    src_db.create_folder("Source Folder")
+    src_db.save_list("source-list", "ads.com\n", 1, 0)
+    src_db.close()
+
+    # Populate the live db with different data
+    db.create_folder("Original Folder")
+    db.save_list("original-list", "tracker.com\n", 1, 0)
+
+    # Perform import: same code path as SettingsTab._import_db
+    src_conn = sqlite3.connect(str(tmp_path / "source.db"))
+    src_conn.backup(db._conn)
+    src_conn.close()
+
+    # Live db should now reflect the backup
+    folders = db.get_folders()
+    lists = db.get_all_lists()
+    assert len(folders) == 1
+    assert folders[0]["name"] == "Source Folder"
+    assert len(lists) == 1
+    assert lists[0]["name"] == "source-list"
+
+
+def test_rename_list(db):
+    lid = db.save_list("original", "x.com\n", 1, 0)
+    db.rename_list(lid, "renamed")
+    assert db.get_list(lid)["name"] == "renamed"
+
+
+def test_get_lists_sort_order(db):
+    """get_lists() returns lists newest-first (ORDER BY created_at DESC)."""
+    from unittest.mock import patch
+    with patch("phlist.database._now", side_effect=[
+        "2024-01-01 00:00:01",
+        "2024-01-01 00:00:02",
+        "2024-01-01 00:00:03",
+    ]):
+        db.save_list("first", "a.com\n", 1, 0)
+        db.save_list("second", "b.com\n", 1, 0)
+        db.save_list("third", "c.com\n", 1, 0)
+    names = [r["name"] for r in db.get_lists(folder_id=None)]
+    assert names == ["third", "second", "first"]
+
+
+def test_get_folders_sort_order(db):
+    """get_folders() returns folders alphabetically (ORDER BY name)."""
+    db.create_folder("Zebra")
+    db.create_folder("Alpha")
+    db.create_folder("Middle")
+    names = [f["name"] for f in db.get_folders()]
+    assert names == ["Alpha", "Middle", "Zebra"]
+
+
+def test_save_list_strips_bidi_unicode(db):
+    """U+202E (RLO) and similar chars are stripped from list names on save."""
+    name_with_rlo = "My List\u202e"
+    lid = db.save_list(name_with_rlo, "x.com\n", 1, 0)
+    assert db.get_list(lid)["name"] == "My List"
+
+
+def test_create_folder_strips_zero_width(db):
+    """U+200B (zero-width space) is stripped from folder names on save."""
+    name_with_zwsp = "Folder\u200bName"
+    db.create_folder(name_with_zwsp)
+    assert db.get_folders()[0]["name"] == "FolderName"
+
+
+def test_import_db_overwrites_all_existing_data(db, tmp_path):
+    """Import leaves no trace of the pre-import data."""
+    db.create_folder("Old")
+    db.save_list("old-list", "x.com\n", 1, 0)
+
+    empty_db = Database(db_path=tmp_path / "empty.db")
+    empty_db.close()
+
+    src_conn = sqlite3.connect(str(tmp_path / "empty.db"))
+    src_conn.backup(db._conn)
+    src_conn.close()
+
+    assert db.get_folders() == []
+    assert db.get_all_lists() == []

@@ -11,7 +11,7 @@ import sys, os, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from pathlib import Path
-from piholecombinelist.database import Database
+from phlist.database import Database
 
 # --- EDIT BELOW ---
 

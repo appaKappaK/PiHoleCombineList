@@ -1,25 +1,49 @@
 """SQLite-backed library for storing and organizing combined blocklists."""
-# v1.1.0
+# v1.1.1
 
 import logging
+import re as _re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+# Invisible / bidi-override unicode characters that could be used to visually
+# disguise a malicious list name (e.g. U+202E RIGHT-TO-LEFT OVERRIDE).
+_UNSAFE_UNICODE_RE = _re.compile(
+    r'[\u200b\u200c\u200d\u202a-\u202e\u2066-\u2069\ufeff]'
+)
+
+
+def _sanitize_name(s: str) -> str:
+    """Strip invisible and bidi-control unicode from user-supplied names."""
+    return _UNSAFE_UNICODE_RE.sub("", s)
+
 _log = logging.getLogger(__name__)
 
 # XDG-compliant data directory
-_DATA_DIR = Path.home() / ".local" / "share" / "piholecombinelist"
+_DATA_DIR = Path.home() / ".local" / "share" / "phlist"
 _OLD_DIR  = Path.home() / ".db"
+_XDG_V1   = Path.home() / ".local" / "share" / "piholecombinelist"  # pre-v1.8.2 dir
 
 
 def _migrate_data_dir() -> None:
-    """One-time migration: move existing files from ~/.db/ to the XDG data dir."""
+    """Chained migration: ~/.db/ → XDG v1 (piholecombinelist) → XDG v2 (phlist)."""
     _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    # Pass 1: ~/.db/ → ~/.local/share/piholecombinelist/
     for name in ("piholecombinelist.db", "piholecombinelist.log"):
         old = _OLD_DIR / name
-        new = _DATA_DIR / name
+        new = _XDG_V1 / name
+        if old.exists() and not new.exists():
+            _XDG_V1.mkdir(parents=True, exist_ok=True)
+            old.rename(new)
+    # Pass 2: ~/.local/share/piholecombinelist/ → ~/.local/share/phlist/ (with rename)
+    for old_name, new_name in (
+        ("piholecombinelist.db",  "phlist.db"),
+        ("piholecombinelist.log", "phlist.log"),
+    ):
+        old = _XDG_V1 / old_name
+        new = _DATA_DIR / new_name
         if old.exists() and not new.exists():
             old.rename(new)
 
@@ -30,7 +54,7 @@ class Database:
     def __init__(self, db_path: Optional[Path] = None) -> None:
         if db_path is None:
             _migrate_data_dir()
-            db_path = _DATA_DIR / "piholecombinelist.db"
+            db_path = _DATA_DIR / "phlist.db"
         self._path = db_path
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
@@ -82,14 +106,14 @@ class Database:
         """Create a new folder. Returns its id."""
         cur = self._conn.execute(
             "INSERT INTO folders (name, created_at) VALUES (?, ?)",
-            (name, _now()),
+            (_sanitize_name(name), _now()),
         )
         self._conn.commit()
         return cur.lastrowid
 
     def rename_folder(self, folder_id: int, name: str) -> None:
         self._conn.execute(
-            "UPDATE folders SET name = ? WHERE id = ?", (name, folder_id)
+            "UPDATE folders SET name = ? WHERE id = ?", (_sanitize_name(name), folder_id)
         )
         self._conn.commit()
 
@@ -125,7 +149,7 @@ class Database:
             """INSERT INTO lists
                (name, folder_id, content, domain_count, duplicates_removed, created_at, sources)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (name, folder_id, content, domain_count, duplicates_removed, _now(), sources),
+            (_sanitize_name(name), folder_id, content, domain_count, duplicates_removed, _now(), sources),
         )
         self._conn.commit()
         _log.debug("Saved list '%s' (id=%d, domains=%d)", name, cur.lastrowid, domain_count)
@@ -171,7 +195,7 @@ class Database:
 
     def rename_list(self, list_id: int, name: str) -> None:
         self._conn.execute(
-            "UPDATE lists SET name = ? WHERE id = ?", (name, list_id)
+            "UPDATE lists SET name = ? WHERE id = ?", (_sanitize_name(name), list_id)
         )
         self._conn.commit()
 

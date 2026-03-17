@@ -1,7 +1,9 @@
 """Tests for ListFetcher."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from piholecombinelist.fetcher import ListFetcher
+from phlist.fetcher import ListFetcher, _MAX_FETCH_BYTES
 
 
 def test_fetch_file_success(tmp_path):
@@ -71,3 +73,74 @@ def test_normalize_leaves_raw_url_unchanged():
 def test_normalize_leaves_non_github_unchanged():
     url = "https://example.com/blocklist.txt"
     assert ListFetcher._normalize_url(url) == url
+
+
+def test_fetch_file_empty(tmp_path):
+    f = tmp_path / "empty.txt"
+    f.write_text("")
+    fetcher = ListFetcher()
+    result = fetcher.fetch_file(str(f))
+    assert result == ""
+    assert fetcher.successful == 1
+
+
+def _mock_response(text: str, url: str = "https://example.com/list.txt",
+                   headers: dict | None = None) -> MagicMock:
+    """Build a mock requests.Response."""
+    resp = MagicMock()
+    resp.text = text
+    resp.url = url
+    resp.headers = headers or {}
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+def test_fetch_url_success():
+    fetcher = ListFetcher()
+    body = "example.com\nads.net\n"
+    with patch.object(fetcher._session, "get", return_value=_mock_response(body)):
+        result = fetcher.fetch_url("https://example.com/list.txt")
+    assert result == body
+    assert fetcher.successful == 1
+    assert fetcher.total_bytes == len(body.encode())
+
+
+def test_fetch_url_size_limit_content_length():
+    fetcher = ListFetcher()
+    big_cl = str(_MAX_FETCH_BYTES + 1)
+    resp = _mock_response("x", headers={"Content-Length": big_cl})
+    with patch.object(fetcher._session, "get", return_value=resp):
+        result = fetcher.fetch_url("https://example.com/list.txt")
+    assert result is None
+    assert fetcher.failed == 1
+
+
+def test_fetch_url_size_limit_body():
+    fetcher = ListFetcher()
+    # Body just over the limit, no Content-Length header
+    big_body = "a" * (_MAX_FETCH_BYTES + 1)
+    with patch.object(fetcher._session, "get", return_value=_mock_response(big_body)):
+        result = fetcher.fetch_url("https://example.com/list.txt")
+    assert result is None
+    assert fetcher.failed == 1
+
+
+def test_fetch_url_null_bytes_stripped():
+    fetcher = ListFetcher()
+    body = "example.com\x00\nadvertising.net\x00extra\n"
+    with patch.object(fetcher._session, "get", return_value=_mock_response(body)):
+        result = fetcher.fetch_url("https://example.com/list.txt")
+    assert result is not None
+    assert "\x00" not in result
+    assert "example.com" in result
+    assert "advertising.net" in result
+
+
+def test_fetch_url_redirect_to_private_ip_rejected():
+    fetcher = ListFetcher()
+    # Final URL after redirect resolves to a private IP literal
+    resp = _mock_response("example.com\n", url="http://192.168.1.1/malicious.txt")
+    with patch.object(fetcher._session, "get", return_value=resp):
+        result = fetcher.fetch_url("https://example.com/list.txt")
+    assert result is None
+    assert fetcher.failed == 1

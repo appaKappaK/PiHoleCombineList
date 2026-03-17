@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from piholecombinelist.updater import has_fetchable_sources, update_list
+from phlist.updater import has_fetchable_sources, update_list
 
 
 # ── has_fetchable_sources ────────────────────────────────────────
@@ -130,3 +130,9 @@ def test_update_list_corrupt_json():
     assert content == ""
     assert domain_count == 0
     assert len(failed) == 1
+
+
+def test_has_fetchable_sources_missing_label():
+    """Source with 'type' but no 'label' — has_fetchable_sources checks type only."""
+    sources = json.dumps([{"type": "url"}])
+    assert has_fetchable_sources(sources) is True
