@@ -392,6 +392,9 @@ class CombineTab(ctk.CTkFrame):
             messagebox.showinfo("Duplicate", "This source is already in the list.")
             return
         self._sources.append((url, None))
+        credit = _credit_for_url(url, url)
+        if credit:
+            self._url_credits[url] = credit
         self._url_entry.delete(0, "end")
         self._refresh_sources_list()
 
@@ -479,8 +482,6 @@ class CombineTab(ctk.CTkFrame):
             label, _ = self._sources[real_idx]
             row = ctk.CTkFrame(self._sources_frame, fg_color="transparent")
             row.pack(fill="x", pady=1)
-            lbl = ctk.CTkLabel(row, text=label, anchor="w", wraplength=220)
-            lbl.pack(side="left", fill="x", expand=True)
             btn = ctk.CTkButton(
                 row,
                 text="✕",
@@ -489,6 +490,8 @@ class CombineTab(ctk.CTkFrame):
                 command=lambda idx=real_idx: self._remove_source(idx),
             )
             btn.pack(side="right")
+            lbl = ctk.CTkLabel(row, text=label, anchor="w")
+            lbl.pack(side="left", fill="x", expand=True)
             for w in (row, lbl, btn):
                 self._bind_scroll(w)
         overflow = len(self._sources) - _SOURCES_DISPLAY_LIMIT
