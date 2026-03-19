@@ -10,6 +10,9 @@ htmlcov/
 *.cover
 *.py,cover
 
+# SECRETS
+/src/phlist/.env
+
 # Virtual environments
 env/
 venv/

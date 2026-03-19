@@ -18,13 +18,14 @@ A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blo
 - Deduplicates across all sources — shows unique domain count and duplicates removed
 - Progress bar and per-source status during combine
 - **COMBINE ALL flash** — button flashes green on success, red on failure, then resets after 2 seconds
-- **Push to phlist-server** — push combined lists directly to your phlist-server instance; Push button turns green when the server is reachable and output is ready
+- **Push to phlist-server** — push combined lists directly to your phlist-server instance; Push button turns green when the server is verified and output is ready (disabled until connection is tested)
 - **Connection polling** — after a manual Test Connection, silently re-checks every 60 seconds so the button auto-updates if the server goes down
 - Save combined lists to a local library organized in folders
 - Load saved lists back into the combiner to merge with new sources
 - **Re-fetch Sources** — re-fetch source URLs for selected lists and rebuild them with fresh data; works with single or multi-select, with a progress bar
 - **Combine Selected** — multi-select lists in the Library (Ctrl+click) and merge them into one deduplicated list
 - **Refresh Credits** — retroactively extract author credits from source URLs for older saved lists
+- **Copy Sources** — one-click copy of all source labels to the clipboard
 - **Fetch cache** — re-combining after adding a few new sources skips re-downloading previously fetched URLs
 - **Source dedup** — duplicate URLs are blocked on add; sources display sorted alphabetically
 - **Splash screen** — branded loading screen with app logo while the GUI initializes
@@ -170,15 +171,11 @@ pytest tests/
 - `Pillow` (splash screen logo)
 - SQLite (Python stdlib)
 
-## What's new in v2.0.0
+## What's new in v2.0.2
 
-- **Dropped self-hosting** — the built-in LAN HTTP server has been removed; the app now pairs exclusively with [phlist-server](https://github.com/appaKappaK/phlist-server) for pushing lists to Pi-hole
-- **Push to phlist-server** — configure a remote server URL and API key in Settings, test the connection, and push combined or library lists directly
-- **Connection polling** — after a manual Test Connection, silently re-checks every 60 seconds so the status stays current
-- **COMBINE ALL flash** — button flashes green on success, red on failure, then resets
-- **Push button states** — green when ready to push, grey when not, red flash on failure
-- **Danger button hover** — destructive buttons stay red on hover instead of flashing blue
-- **Folder action buttons** — Rename and Delete are greyed out when Home is selected
-- **UI polish** — centered placeholder text, sources placeholder on launch, Home-specific placeholder, LISTS header toggling, library button row repositioned
+- **Copy Sources** — new button in the sources panel toolbar to copy all source labels to the clipboard
+- **Push requires verified connection** — the Push button is now disabled until Test Connection succeeds; no more accidentally pushing to an unverified server
+- **Save to Library stays on Combine tab** — no longer auto-switches to the Library tab after saving
+- **API key field Ctrl+A** — the API key entry in Settings now supports Ctrl+A to select all
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.

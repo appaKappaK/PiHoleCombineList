@@ -28,9 +28,11 @@ _LIB_PREVIEW_LIMIT = _DISPLAY_LIMIT
 _CLR_SELECTED = ("gray70", "gray30")          # selected item background (light, dark)
 _CLR_UNSELECTED = ("gray88", "gray20")         # subtle bg in light mode, near-invisible in dark
 _CLR_BTN_TEXT = ("gray10", "#DCE4EE")         # button text: near-black (light), CTk default (dark)
-_CLR_BTN_DEFAULT = ["#3B8ED0", "#1F6AA5"]  # default button (light, dark)
-_CLR_BTN_DANGER       = ["#C0392B", "#922B21"]   # destructive / stop button
-_CLR_BTN_DANGER_HOVER = ["#A93226", "#7B241C"]
+_CLR_BTN_DEFAULT       = ["#3B8ED0", "#1F6AA5"]   # default button (light, dark)
+_CLR_BTN_DANGER        = ["#C0392B", "#922B21"]   # destructive / stop button
+_CLR_BTN_DANGER_HOVER  = ["#A93226", "#7B241C"]
+_CLR_BTN_SUCCESS       = ["#27AE60", "#1E8449"]   # server reachable / confirmed action
+_CLR_BTN_SUCCESS_HOVER = ["#219A52", "#196F3D"]
 
 
 def _slugify(name: str) -> str:
@@ -523,11 +525,11 @@ class LibraryTab(ctk.CTkFrame):
         self._export_btn.configure(state=any_sel)
         remote_url = self._db.get_setting("remote_server_url", "")
         if n >= 1 and remote_url and self._server_reachable:
-            self._push_btn.configure(state="normal", fg_color=_CLR_BTN_DEFAULT)
+            self._push_btn.configure(state="normal", fg_color=_CLR_BTN_SUCCESS, hover_color=_CLR_BTN_SUCCESS_HOVER)
             self._push_tooltip.update("Push to Server — upload to your phlist-server instance.")
         elif n >= 1 and remote_url:
-            # URL set but not verified — grey at rest, blue on hover
-            self._push_btn.configure(state="normal", fg_color=("gray60", "gray40"))
+            # URL set but not verified — disabled until connection tested
+            self._push_btn.configure(state="disabled", fg_color=("gray60", "gray40"))
             self._push_tooltip.update("Connection not verified — go to Settings to test first.")
         else:
             self._push_btn.configure(state="disabled", fg_color=("gray60", "gray40"))
@@ -696,9 +698,16 @@ class LibraryTab(ctk.CTkFrame):
         def _worker():
             ok, msg = _push_list(url, key, slug, content)
             def _done():
-                self._push_btn.configure(state="normal", text="Push")
+                self._update_combine_btn()
+                self._push_btn.configure(text="Push")
                 if ok:
-                    messagebox.showinfo("Pushed", f"{row['name']} → {url}/lists/{slug}.txt")
+                    pi_url = f"{url}/lists/{slug}.txt"
+                    try:
+                        self.clipboard_clear()
+                        self.clipboard_append(pi_url)
+                    except Exception:
+                        pass
+                    messagebox.showinfo("Pushed", f"{row['name']} pushed.\n\nPi-hole URL (copied to clipboard):\n{pi_url}")
                 else:
                     messagebox.showerror("Push failed", msg)
             self.after(0, _done)

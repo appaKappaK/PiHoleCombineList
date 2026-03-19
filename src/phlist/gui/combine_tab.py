@@ -324,10 +324,22 @@ class CombineTab(ctk.CTkFrame):
         extract_btn.grid(row=3, column=0, columnspan=2, sticky="ew", padx=10, pady=(8, 0))
         Tooltip(extract_btn, "Reads your clipboard and adds every http/https URL found as a separate source.")
 
+        # Sources toolbar (row 4)
+        sources_toolbar = ctk.CTkFrame(left, fg_color="transparent")
+        sources_toolbar.grid(row=4, column=0, columnspan=2, sticky="ew", padx=10, pady=(10, 0))
+        sources_toolbar.columnconfigure(0, weight=1)
+        self._copy_sources_btn = ctk.CTkButton(
+            sources_toolbar, text="Copy Sources", width=110, height=26,
+            fg_color=("gray75", "gray30"), hover_color=("gray65", "gray40"),
+            font=ctk.CTkFont(size=12), command=self._copy_sources,
+        )
+        self._copy_sources_btn.grid(row=0, column=1)
+        Tooltip(self._copy_sources_btn, "Copy all source labels to the clipboard.")
+
         # Sources list (row 5 removed — label replaced by in-frame placeholder)
         self._sources_frame = ctk.CTkScrollableFrame(left, height=130)
         self._sources_frame.grid(
-            row=5, column=0, columnspan=2, sticky="nsew", padx=10, pady=(10, 0)
+            row=5, column=0, columnspan=2, sticky="nsew", padx=10, pady=(4, 0)
         )
         left.rowconfigure(5, weight=1)
         # Auto-hide scrollbar + refit labels on canvas resize (window resize)
@@ -409,7 +421,7 @@ class CombineTab(ctk.CTkFrame):
         Tooltip(self._save_file_btn, "Export the combined list as a .txt file to disk.")
 
         self._save_lib_btn = ctk.CTkButton(
-            btn_row, text="Library", width=75, state="disabled", command=self._save_to_library
+            btn_row, text="Save to Library", width=110, state="disabled", command=self._save_to_library
         )
         self._save_lib_btn.pack(side="left", padx=(0, 8))
         Tooltip(self._save_lib_btn, "Save to the app's built-in library for later use.")
@@ -671,6 +683,14 @@ class CombineTab(ctk.CTkFrame):
         self._sources.pop(index)
         self._refresh_sources_list()
 
+    def _copy_sources(self) -> None:
+        """Copy all source labels to the clipboard."""
+        if not self._sources:
+            return
+        self.clipboard_clear()
+        self.clipboard_append("\n".join(label for label, _ in self._sources))
+        messagebox.showinfo("Copied", f"Copied {len(self._sources)} source(s) to clipboard.")
+
     def _view_all_sources(self) -> None:
         """Write all source labels to a temp file and open in the system text editor."""
         lines = [label for label, _ in self._sources]
@@ -886,7 +906,6 @@ class CombineTab(ctk.CTkFrame):
                 sources=sources_json,
             )
             messagebox.showinfo("Saved", f'"{dialog.result_name}" saved to library.')
-            self._switch_to_library()
 
     def _update_btn_states(self) -> None:
         """Enable/disable buttons based on whether sources and output are present."""
@@ -933,13 +952,15 @@ class CombineTab(ctk.CTkFrame):
         default_slug = self._db.get_setting("default_host_filename", "") or "blocklist"
         slug = simpledialog.askstring(
             "Push to Server",
-            "Slug for this list (e.g. blocklist):",
+            "List name (e.g. blocklist) — saved as <name>.txt on the server:",
             initialvalue=default_slug,
             parent=self,
         )
         if not slug or not slug.strip():
             return
-        slug = slug.strip()
+        slug = re.sub(r'[^a-z0-9]+', '-', slug.strip().lower()).strip('-')
+        if not slug:
+            return
         content = self._last_result
         self._push_btn.configure(state="disabled", text="Pushing...")
 
@@ -948,11 +969,18 @@ class CombineTab(ctk.CTkFrame):
 
             def _done():
                 if ok:
+                    self._db.set_setting("default_host_filename", slug)
                     self._push_btn.configure(text="Push")
                     self.refresh_push_btn_state()
+                    pi_url = f"{base_url}/lists/{slug}.txt"
+                    try:
+                        self.clipboard_clear()
+                        self.clipboard_append(pi_url)
+                    except Exception:
+                        pass
                     messagebox.showinfo(
                         "Pushed",
-                        f"{msg}\n\nPi-hole URL:\n{base_url}/lists/{slug}.txt",
+                        f"{msg}\n\nPi-hole URL (copied to clipboard):\n{pi_url}",
                     )
                 else:
                     self._push_btn.configure(

@@ -22,7 +22,7 @@ def push_list(base_url: str, api_key: str, slug: str, content: str) -> tuple[boo
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=300) as resp:
             _log.info("push_list: PUT %s → %s", url, resp.status)
             return True, f"Pushed to {url}"
     except urllib.error.HTTPError as exc:
@@ -44,7 +44,7 @@ def check_connection(base_url: str, api_key: str) -> tuple[bool, str]:
         headers={"Authorization": f"Bearer {api_key}"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             _log.info("test_connection: %s → %s", url, resp.status)
             return True, f"Connected  ({resp.status} OK)"
     except urllib.error.HTTPError as exc:

@@ -105,6 +105,11 @@ class SettingsTab(ctk.CTkFrame):
         if saved_key:
             self._remote_key_entry.insert(0, saved_key)
         self._remote_key_entry.grid(row=1, column=1, sticky="ew")
+        self._remote_key_entry.bind("<Control-a>", lambda _: (
+            self._remote_key_entry.select_range(0, "end"),
+            self._remote_key_entry.icursor("end"),
+            "break"
+        )[-1])
         Tooltip(self._remote_key_entry, "Bearer token the server requires for PUT requests.")
 
         action_row = ctk.CTkFrame(card, fg_color="transparent")

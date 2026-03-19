@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.2] - 2026-03-19
+
+### Added
+- **Copy Sources button** — new button in the sources panel toolbar that copies all source labels to the clipboard
+
+### Changed
+- **Push button requires verified connection** — push button is now disabled (not just grey) when a server URL is configured but the connection has not been tested successfully in the current session
+- **Save to Library no longer switches tabs** — after saving a combined result to the library, the app stays on the Combine tab instead of jumping to Library
+- **API key field Ctrl+A** — the API key entry in Settings now supports Ctrl+A to select all text
+
 ## [2.0.0] - 2026-03-18
 
 ### Added
