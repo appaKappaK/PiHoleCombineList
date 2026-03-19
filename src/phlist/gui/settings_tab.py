@@ -17,6 +17,7 @@ _POLL_INTERVAL_MS = 60_000   # silent re-check interval after first manual test
 
 from ..database import Database, _DATA_DIR
 from ..remote import check_connection as _check_connection
+from .ctk_helpers import get_canvas, get_scrollbar
 from .tooltip import Tooltip
 
 
@@ -204,15 +205,16 @@ class SettingsTab(ctk.CTkFrame):
 
 
         # Auto-hide scrollbar when content fits
-        def _update_scroll_vis(canvas=scroll._parent_canvas, sb=scroll._scrollbar):
+        def _update_scroll_vis(canvas=get_canvas(scroll), sb=get_scrollbar(scroll)):
             bbox = canvas.bbox("all")
             if bbox and (bbox[3] - bbox[1]) > canvas.winfo_height():
                 sb.grid()
             else:
                 sb.grid_remove()
-        scroll._parent_canvas.bind("<Configure>", lambda _: self.after(0, _update_scroll_vis))
+        get_canvas(scroll).bind("<Configure>", lambda _: self.after(0, _update_scroll_vis))
 
         self._polling_active: bool = False
+        self._poll_generation: int = 0
 
     # ── Actions ─────────────────────────────────────────────────────
 
@@ -340,6 +342,7 @@ class SettingsTab(ctk.CTkFrame):
             return
         _log.info("Config reset by user")
         self._polling_active = False
+        self._poll_generation += 1
         # Clear the visible fields
         self._remote_url_entry.delete(0, "end")
         self._remote_key_entry.delete(0, "end")
@@ -372,6 +375,7 @@ class SettingsTab(ctk.CTkFrame):
         self.after(2000, lambda: self._save_remote_btn.configure(state="normal", text="Save"))
         # Reset test button to untested state since credentials changed
         self._polling_active = False
+        self._poll_generation += 1
         self._test_conn_btn.configure(state="normal", text="Test Connection",
                                       fg_color=("gray60", "gray40"),
                                       hover_color=["#36719F", "#144870"])
@@ -397,6 +401,8 @@ class SettingsTab(ctk.CTkFrame):
 
         # Stop any active polling cycle before running a manual test
         self._polling_active = False
+        self._poll_generation += 1
+        gen = self._poll_generation
 
         # Greyed-out "testing" state
         self._test_conn_btn.configure(state="disabled", text="Waiting...",
@@ -408,6 +414,8 @@ class SettingsTab(ctk.CTkFrame):
             ok, msg = _check_connection(url, key)
 
             def _done():
+                if gen != self._poll_generation:
+                    return
                 _log.info("Test connection: %s", "OK" if ok else f"failed — {msg}")
                 if ok:
                     self._test_conn_btn.configure(
@@ -446,11 +454,14 @@ class SettingsTab(ctk.CTkFrame):
         if not url:
             self._polling_active = False
             return
+        gen = self._poll_generation
 
         def _worker():
             ok, msg = _check_connection(url, key)
 
             def _done():
+                if gen != self._poll_generation:
+                    return
                 if ok:
                     self._test_conn_btn.configure(
                         state="normal", text="Connected",

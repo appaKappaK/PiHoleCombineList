@@ -97,9 +97,10 @@ class ListFetcher:
             # Strip null bytes — undefined behaviour in Tkinter / some SQLite builds
             content = content.replace("\x00", "")
 
+            content_bytes = len(content.encode())
             self.successful += 1
-            self.total_bytes += len(content.encode())
-            _log.info("Fetched %d bytes from %s", len(content.encode()), url)
+            self.total_bytes += content_bytes
+            _log.info("Fetched %d bytes from %s", content_bytes, url)
             time.sleep(0.5)
             return content
         except requests.RequestException as exc:
@@ -112,9 +113,10 @@ class ListFetcher:
         _log.info("Reading file: %s", path)
         try:
             content = Path(path).read_text(encoding="utf-8", errors="replace")
+            content_bytes = len(content.encode())
             self.successful += 1
-            self.total_bytes += len(content.encode())
-            _log.info("Read %d bytes from %s", len(content.encode()), path)
+            self.total_bytes += content_bytes
+            _log.info("Read %d bytes from %s", content_bytes, path)
             return content
         except OSError as exc:
             _log.warning("Failed to read %s: %s", path, exc)

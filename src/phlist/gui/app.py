@@ -39,16 +39,41 @@ class _SplashScreen(ctk.CTkToplevel):
         w, h = 380, 280
         sx, sy = self._calc_center(w, h, saved_geometry)
         self.geometry(f"{w}x{h}+{sx}+{sy}")
+        self.update()  # Map the window before creating images (required on Wayland)
 
-        # Load the larger splash logo
+        # Load the larger splash logo — Canvas is more reliable than Label for
+        # image rendering in overrideredirect windows on Wayland.
+        # Composites RGBA images against the splash background so transparency works.
         try:
-            from PIL import Image
+            from PIL import Image, ImageTk
             logo_path = _ir.files("phlist") / "assets" / "splash_logo.png"
-            pil_img = Image.open(str(logo_path))
-            self._logo = ctk.CTkImage(light_image=pil_img, dark_image=pil_img, size=(128, 128))
-            ctk.CTkLabel(self, image=self._logo, text="", fg_color=_SPLASH_BG).pack(pady=(24, 8))
-        except Exception:
-            pass  # Non-fatal — splash still shows text
+            pil_img = Image.open(str(logo_path)).convert("RGBA").resize((128, 128), Image.LANCZOS)
+            # Strip flat background with AA-preserving gradient:
+            # pixels close to the corner colour fade to transparent smoothly.
+            corner = pil_img.getpixel((0, 0))[:3]
+            _HARD = 12   # below this distance → fully transparent
+            _SOFT = 40   # above this distance → fully opaque
+            new_data = []
+            for r, g, b, a in pil_img.getdata():
+                dist = max(abs(r - corner[0]), abs(g - corner[1]), abs(b - corner[2]))
+                if dist < _HARD:
+                    new_data.append((r, g, b, 0))
+                elif dist < _SOFT:
+                    new_a = int((dist - _HARD) / (_SOFT - _HARD) * 255)
+                    new_data.append((r, g, b, new_a))
+                else:
+                    new_data.append((r, g, b, a))
+            pil_img.putdata(new_data)
+            bg_rgb = tuple(int(_SPLASH_BG.lstrip("#")[i:i+2], 16) for i in (0, 2, 4))
+            bg = Image.new("RGBA", pil_img.size, bg_rgb + (255,))
+            composited = Image.alpha_composite(bg, pil_img)
+            self._logo = ImageTk.PhotoImage(composited.convert("RGB"))
+            canvas = _tk.Canvas(self, width=128, height=128, bg=_SPLASH_BG,
+                                 highlightthickness=0, bd=0)
+            canvas.pack(pady=(24, 8))
+            canvas.create_image(64, 64, image=self._logo)
+        except Exception as exc:
+            _log.debug("Splash logo not loaded: %s", exc)  # Non-fatal — splash still shows text
 
         ctk.CTkLabel(
             self,
@@ -113,14 +138,24 @@ class App(ctk.CTk):
 
         self.minsize(815, 585)
 
-        # Set window/taskbar icon
+        # Set window/taskbar icon — reuse splash_logo with background stripped
         self._icon = None
         try:
-            _png = (_ir.files("phlist") / "assets" / "phlist.png").read_bytes()
-            self._icon = _tk.PhotoImage(data=base64.b64encode(_png).decode())
+            from PIL import Image, ImageTk
+            _icon_path = _ir.files("phlist") / "assets" / "splash_logo.png"
+            _icon_img = Image.open(str(_icon_path)).convert("RGBA").resize((64, 64), Image.LANCZOS)
+            _corner = _icon_img.getpixel((0, 0))[:3]
+            _HARD, _SOFT = 12, 40
+            _icon_img.putdata([
+                (r, g, b, 0) if (d := max(abs(r-_corner[0]), abs(g-_corner[1]), abs(b-_corner[2]))) < _HARD
+                else (r, g, b, int((d - _HARD) / (_SOFT - _HARD) * 255)) if d < _SOFT
+                else (r, g, b, a)
+                for r, g, b, a in _icon_img.getdata()
+            ])
+            self._icon = ImageTk.PhotoImage(_icon_img)
             self.iconphoto(True, self._icon)
-        except Exception:
-            pass  # Non-fatal — icon is cosmetic
+        except Exception as exc:
+            _log.debug("Window icon not loaded: %s", exc)  # Non-fatal — icon is cosmetic
 
         # Apply saved geometry while hidden — no stutter on deiconify
         self.geometry(saved_geo if saved_geo else "1000x700")

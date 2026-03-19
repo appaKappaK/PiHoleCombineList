@@ -21,6 +21,9 @@ from ..combiner import ListCombiner
 from ..database import Database
 from ..fetcher import ListFetcher
 from ..remote import push_list as _push_list
+from .ctk_helpers import (
+    get_canvas, get_inner_window_id, get_label_inner, get_scrollbar, get_underlying_textbox,
+)
 from .tooltip import Tooltip
 
 _log = logging.getLogger(__name__)
@@ -332,10 +335,10 @@ class CombineTab(ctk.CTkFrame):
             self.after(0, self._update_sources_scrollbar)
             self.after(0, self._refit_all_source_labels)
             if not self._sources:
-                c = self._sources_frame._parent_canvas
-                c.itemconfigure(self._sources_frame._create_window_id,
+                c = get_canvas(self._sources_frame)
+                c.itemconfigure(get_inner_window_id(self._sources_frame),
                                 height=c.winfo_height(), width=c.winfo_width())
-        self._sources_frame._parent_canvas.bind("<Configure>", _on_canvas_resize)
+        get_canvas(self._sources_frame).bind("<Configure>", _on_canvas_resize)
 
         combine_row = ctk.CTkFrame(left, fg_color="transparent")
         combine_row.grid(row=6, column=0, columnspan=2, sticky="ew", padx=10, pady=10)
@@ -459,7 +462,8 @@ class CombineTab(ctk.CTkFrame):
         """Read the clipboard and add every http/https URL found as a separate source."""
         try:
             text = self.clipboard_get()
-        except Exception:
+        except Exception as exc:
+            _log.debug("clipboard_get failed: %s", exc)
             text = ""
         if not text or not text.strip():
             messagebox.showinfo("Clipboard empty", "Nothing found in the clipboard.")
@@ -511,7 +515,7 @@ class CombineTab(ctk.CTkFrame):
             if w <= 4:
                 return
             try:
-                inner = getattr(lbl, '_label', None) or getattr(lbl, '_text_label', None)
+                inner = get_label_inner(lbl)
                 f = _tkfont.Font(font=inner.cget("font")) if inner else _tkfont.nametofont("TkDefaultFont")
                 t = full_text
                 if f.measure(t) <= w:
@@ -522,8 +526,8 @@ class CombineTab(ctk.CTkFrame):
                     new_text = t + "…"
                 if lbl.cget("text") != new_text:
                     lbl.configure(text=new_text)
-            except Exception:
-                pass
+            except Exception as exc:
+                _log.debug("Label refit failed: %s", exc)
 
         # Store so _refit_all_source_labels() can call this after geometry settles.
         # Do NOT bind <Configure> on the row — it fires many times during initial
@@ -541,8 +545,8 @@ class CombineTab(ctk.CTkFrame):
 
     def _update_sources_scrollbar(self) -> None:
         """Show the scrollbar only when content exceeds the visible area."""
-        canvas = self._sources_frame._parent_canvas
-        scrollbar = self._sources_frame._scrollbar
+        canvas = get_canvas(self._sources_frame)
+        scrollbar = get_scrollbar(self._sources_frame)
         bbox = canvas.bbox("all")
         if bbox and (bbox[3] - bbox[1]) > canvas.winfo_height():
             scrollbar.grid()
@@ -555,11 +559,12 @@ class CombineTab(ctk.CTkFrame):
         text = "Combine sources to see output here"
         self._output_box.configure(state="normal")
         self._output_box.delete("1.0", "end")
-        box_h = self._output_box._textbox.winfo_height()
+        box_h = get_underlying_textbox(self._output_box).winfo_height()
         try:
-            f = _tkfont.Font(font=self._output_box._textbox.cget("font"))
+            f = _tkfont.Font(font=get_underlying_textbox(self._output_box).cget("font"))
             line_h = f.metrics("linespace")
-        except Exception:
+        except Exception as exc:
+            _log.debug("Font metric fallback: %s", exc)
             line_h = 16
         blank = max(0, (box_h // max(line_h, 1)) // 2 - 1) if box_h > line_h else 0
         self._output_box.insert("1.0", "\n" * blank + text, "placeholder")
@@ -578,7 +583,7 @@ class CombineTab(ctk.CTkFrame):
         Uses fractional yview_moveto so the visible distance per tick stays
         constant (~3 rows) regardless of how many sources are in the list.
         """
-        canvas = self._sources_frame._parent_canvas
+        canvas = get_canvas(self._sources_frame)
         _ROW_PX = 26  # approximate row height (button height=24 + pady=1 each side)
 
         def _scroll(direction: int) -> None:
@@ -602,8 +607,8 @@ class CombineTab(ctk.CTkFrame):
         for widget in self._sources_frame.winfo_children():
             widget.destroy()
         # Reset inner frame to content-driven height
-        self._sources_frame._parent_canvas.itemconfigure(
-            self._sources_frame._create_window_id, height=0)
+        get_canvas(self._sources_frame).itemconfigure(
+            get_inner_window_id(self._sources_frame), height=0)
         if not self._sources:
             ctk.CTkLabel(
                 self._sources_frame,
@@ -614,8 +619,8 @@ class CombineTab(ctk.CTkFrame):
             ).pack(expand=True, fill="both")
             # Stretch inner frame to fill canvas so expand=True centers the label
             def _stretch():
-                c = self._sources_frame._parent_canvas
-                c.itemconfigure(self._sources_frame._create_window_id,
+                c = get_canvas(self._sources_frame)
+                c.itemconfigure(get_inner_window_id(self._sources_frame),
                                 height=c.winfo_height(), width=c.winfo_width())
             self.after(0, _stretch)
             self.after(0, self._update_sources_scrollbar)

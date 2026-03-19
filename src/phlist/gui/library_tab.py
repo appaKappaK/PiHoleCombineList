@@ -16,6 +16,7 @@ from ..database import Database
 from ..remote import push_list as _push_list
 from ..updater import has_fetchable_sources, update_list as _run_update
 from .combine_tab import SaveToLibraryDialog, _credit_for_url, _DISPLAY_LIMIT
+from .ctk_helpers import get_canvas, get_inner_window_id, get_scrollbar, get_underlying_textbox
 from .tooltip import Tooltip
 
 _log = logging.getLogger(__name__)
@@ -125,13 +126,13 @@ class LibraryTab(ctk.CTkFrame):
         self._folders_frame = ctk.CTkScrollableFrame(left, height=150)
         self._folders_frame.grid(row=1, column=0, sticky="nsew", padx=10)
         left.rowconfigure(1, weight=1)
-        def _hide_folders_sb(canvas=self._folders_frame._parent_canvas, sb=self._folders_frame._scrollbar):
+        def _hide_folders_sb(canvas=get_canvas(self._folders_frame), sb=get_scrollbar(self._folders_frame)):
             bbox = canvas.bbox("all")
             if bbox and (bbox[3] - bbox[1]) > canvas.winfo_height():
                 sb.grid()
             else:
                 sb.grid_remove()
-        self._folders_frame._parent_canvas.bind("<Configure>", lambda _: self.after(0, _hide_folders_sb))
+        get_canvas(self._folders_frame).bind("<Configure>", lambda _: self.after(0, _hide_folders_sb))
 
         folder_btn_row = ctk.CTkFrame(left, fg_color="transparent")
         folder_btn_row.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 0))
@@ -164,17 +165,17 @@ class LibraryTab(ctk.CTkFrame):
         self._lists_frame = ctk.CTkScrollableFrame(left, height=150)
         self._lists_frame.grid(row=4, column=0, sticky="nsew", padx=10)
         left.rowconfigure(4, weight=1)
-        def _hide_lists_sb(canvas=self._lists_frame._parent_canvas, sb=self._lists_frame._scrollbar):
+        def _hide_lists_sb(canvas=get_canvas(self._lists_frame), sb=get_scrollbar(self._lists_frame)):
             bbox = canvas.bbox("all")
             if bbox and (bbox[3] - bbox[1]) > canvas.winfo_height():
                 sb.grid()
             else:
                 sb.grid_remove()
             if self._lists_placeholder_active:
-                canvas.itemconfigure(self._lists_frame._create_window_id,
+                canvas.itemconfigure(get_inner_window_id(self._lists_frame),
                                      height=canvas.winfo_height(),
                                      width=canvas.winfo_width())
-        self._lists_frame._parent_canvas.bind("<Configure>", lambda _: self.after(0, _hide_lists_sb))
+        get_canvas(self._lists_frame).bind("<Configure>", lambda _: self.after(0, _hide_lists_sb))
 
         list_btn_row = ctk.CTkFrame(left, fg_color="transparent")
         list_btn_row.grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 10))
@@ -348,15 +349,16 @@ class LibraryTab(ctk.CTkFrame):
             if short:
                 return dt.strftime("%-m/%d/%y")
             return dt.strftime("%-m/%d/%y %-I:%M %p")
-        except Exception:
+        except Exception as exc:
+            _log.debug("Date format fallback: %s", exc)
             return iso_str
 
     def _refresh_lists(self) -> None:
         for w in self._lists_frame.winfo_children():
             w.destroy()
         # Reset inner frame to content-driven height
-        self._lists_frame._parent_canvas.itemconfigure(
-            self._lists_frame._create_window_id, height=0)
+        get_canvas(self._lists_frame).itemconfigure(
+            get_inner_window_id(self._lists_frame), height=0)
 
         items = self._db.get_lists(self._selected_folder_id)
         if not items:
@@ -375,8 +377,8 @@ class LibraryTab(ctk.CTkFrame):
                 wraplength=160,
             ).pack(expand=True, fill="both")
             def _stretch():
-                c = self._lists_frame._parent_canvas
-                c.itemconfigure(self._lists_frame._create_window_id,
+                c = get_canvas(self._lists_frame)
+                c.itemconfigure(get_inner_window_id(self._lists_frame),
                                 height=c.winfo_height(), width=c.winfo_width())
             self.after(0, _stretch)
             return
@@ -578,11 +580,12 @@ class LibraryTab(ctk.CTkFrame):
         self._content_has_content = False
         self._content_box.configure(state="normal", text_color="gray50", cursor="arrow")
         self._content_box.delete("1.0", "end")
-        box_h = self._content_box._textbox.winfo_height()
+        box_h = get_underlying_textbox(self._content_box).winfo_height()
         try:
-            f = _tkfont.Font(font=self._content_box._textbox.cget("font"))
+            f = _tkfont.Font(font=get_underlying_textbox(self._content_box).cget("font"))
             line_h = f.metrics("linespace")
-        except Exception:
+        except Exception as exc:
+            _log.debug("Font metric fallback: %s", exc)
             line_h = 16
         blank = max(0, (box_h // max(line_h, 1)) // 2 - 1) if box_h > line_h else 0
         self._content_box.insert("1.0", "\n" * blank + text, "placeholder")
