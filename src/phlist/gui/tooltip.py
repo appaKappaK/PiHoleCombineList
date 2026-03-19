@@ -47,6 +47,11 @@ class Tooltip:
         label.pack()
         self._tip_window = tw
 
+    def update(self, text: str) -> None:
+        """Change the tooltip text; hides any currently visible tip."""
+        self._text = text
+        self._hide()
+
     def _hide(self) -> None:
         if self._tip_window:
             self._tip_window.destroy()

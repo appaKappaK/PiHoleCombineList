@@ -249,6 +249,16 @@ class Database:
         )
         self._conn.commit()
 
+    def reset_library(self) -> None:
+        """Delete all lists and folders. Settings are preserved."""
+        self._conn.executescript("DELETE FROM lists; DELETE FROM folders;")
+        self._conn.commit()
+
+    def reset_settings(self) -> None:
+        """Delete all stored settings. Library lists and folders are preserved."""
+        self._conn.execute("DELETE FROM settings")
+        self._conn.commit()
+
     def close(self) -> None:
         self._conn.close()
 

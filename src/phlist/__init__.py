@@ -1,14 +1,12 @@
 """Pi-hole Combined Blocklist Generator."""
-# v1.8.3
 
-__version__ = "1.8.4"
+__version__ = "2.0.0"
 
 from .combiner import ListCombiner
 from .database import Database
 from .deduplicator import Deduplicator
 from .fetcher import ListFetcher
 from .parser import ListParser
-from .server import ListServer
 
 __all__ = [
     "ListCombiner",
@@ -16,5 +14,4 @@ __all__ = [
     "Deduplicator",
     "ListFetcher",
     "ListParser",
-    "ListServer",
 ]

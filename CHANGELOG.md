@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.0] - 2026-03-18
+
+### Added
+- **COMBINE ALL flash** — button flashes green "Done ✓" on success, red "⚠ Partial" / "⚠ Failed" on failure, resets after 2 seconds
+- **Push button state** — green when server reachable + output ready, grey when not, red flash on push failure
+- **Connection polling** — after the first manual Test Connection, silently re-checks every 60 seconds for the rest of the session; button auto-updates if server goes down
+- **Danger button hover** — Clear All, Delete List, and Delete Folder buttons stay dark red on hover (no blue flash), matching the Reset Library / Reset Config pattern
+- **Folder action greying** — Rename and Delete folder buttons are greyed out when Home is selected (Home cannot be renamed or deleted)
+- **Centered placeholder text** — all four empty-state panels (sources, lists, output, content) now center their placeholder text both horizontally and vertically
+- **Home placeholder** — Home folder shows "Combine sources and save to library to see your lists here" instead of "No lists in this folder"
+- **LISTS header toggle** — the bold "LISTS" header hides when the lists panel shows placeholder text
+- **Sources placeholder on launch** — sources panel now shows "No sources added yet" immediately on app start
+
+### Changed
+- **Self-hosting removed** — the built-in LAN HTTP server (`server.py`) has been removed; the app now pairs exclusively with [phlist-server](https://github.com/appaKappaK/phlist-server) for pushing lists to Pi-hole
+- **Push workflow** — configure a remote phlist-server URL and API key in Settings; push combined or library lists directly to the server
+- **Settings → Remote Server** — replaces the old port-based server config with URL + API key fields, a Save button, and a Test Connection button with session-persistent polling
+- **No auto-test on launch** — the Test Connection button starts grey on every app open; user must click it once to begin session polling
+- **Window minimum width** increased by 150 px (665 → 815)
+- **Library button row** moved below the content preview panel (was above it)
+- **Clear All button** — starts grey, turns red only when sources are present
+- **Delete List button** — starts grey, turns red only when a list is selected
+- **Root → 🏠 Home** renamed throughout the UI and dialogs
+
+### Removed
+- `server.py` — LAN HTTP self-hosting module
+- `test_server.py` — associated tests
+- Dead methods `load_content_as_source` and `load_sources_from_library` from `CombineTab`
+- Auto-test-on-tab-switch behaviour (Test Connection no longer fires when opening Settings)
+
+### Fixed
+- Placeholder text not appearing in the sources panel on first launch
+- Delete list leaving the content box without placeholder text or grey colour
+- Move menu missing the 🏠 Home option after the Root → Home rename
+
 ## [1.8.3] - 2026-03-17
 
 ### Added

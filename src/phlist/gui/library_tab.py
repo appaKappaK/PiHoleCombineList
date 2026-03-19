@@ -28,7 +28,8 @@ _CLR_SELECTED = ("gray70", "gray30")          # selected item background (light,
 _CLR_UNSELECTED = ("gray88", "gray20")         # subtle bg in light mode, near-invisible in dark
 _CLR_BTN_TEXT = ("gray10", "#DCE4EE")         # button text: near-black (light), CTk default (dark)
 _CLR_BTN_DEFAULT = ["#3B8ED0", "#1F6AA5"]  # default button (light, dark)
-_CLR_BTN_DANGER = ["#C0392B", "#922B21"]   # destructive / stop button
+_CLR_BTN_DANGER       = ["#C0392B", "#922B21"]   # destructive / stop button
+_CLR_BTN_DANGER_HOVER = ["#A93226", "#7B241C"]
 
 
 def _slugify(name: str) -> str:
@@ -39,21 +40,65 @@ def _slugify(name: str) -> str:
     return slug or "list"
 
 
+class _DeleteFolderDialog(ctk.CTkToplevel):
+    """Confirm folder deletion with an option to also delete all lists inside."""
+
+    def __init__(self, parent, folder_name: str) -> None:
+        super().__init__(parent)
+        self.transient(parent)
+        self.title("Delete Folder")
+        self.geometry("360x190")
+        self.resizable(False, False)
+
+        self.confirmed = False
+        self.delete_lists = False
+
+        ctk.CTkLabel(self, text=f'Delete folder "{folder_name}"?',
+                     font=ctk.CTkFont(weight="bold")).pack(pady=(18, 4), padx=20)
+        ctk.CTkLabel(self, text="Lists inside will be released to 🏠 Home.",
+                     text_color="gray60").pack(padx=20)
+
+        self._del_lists_var = ctk.BooleanVar(value=False)
+        ctk.CTkCheckBox(self, text="Also delete all lists inside",
+                        variable=self._del_lists_var).pack(padx=24, anchor="w", pady=(12, 14))
+
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(fill="x", padx=20, pady=(0, 16))
+        btn_row.columnconfigure(0, weight=1)
+        btn_row.columnconfigure(1, weight=1)
+        ctk.CTkButton(btn_row, text="Delete", fg_color=_CLR_BTN_DANGER,
+                      command=self._on_delete).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        ctk.CTkButton(btn_row, text="Cancel",
+                      command=self.destroy).grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        self.update_idletasks()
+        self.lift()
+        self.focus_force()
+        self.grab_set()
+
+    def _on_delete(self) -> None:
+        self.confirmed = True
+        self.delete_lists = self._del_lists_var.get()
+        self.destroy()
+
+
 class LibraryTab(ctk.CTkFrame):
     """The Library tab: browse folders and saved lists, load back into combiner."""
 
     def __init__(self, parent, db: Database, get_combine_tab_cb, switch_to_combine_cb,
-                 list_type_var: ctk.StringVar,
-                 refresh_stats_cb=None) -> None:
+                 list_type_var: ctk.StringVar) -> None:
         super().__init__(parent, fg_color="transparent")
         self._db = db
         self._get_combine_tab = get_combine_tab_cb
         self._switch_to_combine = switch_to_combine_cb
         self._list_type_var = list_type_var
-        self._refresh_stats_cb = refresh_stats_cb
         self._selected_folder_id: Optional[int] = None  # None = root
         self._selected_list_ids: set[int] = set()  # multi-select (Ctrl+click)
         self._updating = False
+        self._move_folder_picked = False  # True once user explicitly picks a folder
+        self._server_reachable = False
+        self._content_has_content = False  # True when real list content is loaded
+        self._lists_placeholder_active = False
 
         self._build_ui()
         self.refresh()
@@ -64,8 +109,8 @@ class LibraryTab(ctk.CTkFrame):
         return next(iter(self._selected_list_ids), None)
 
     def _build_ui(self) -> None:
-        self.columnconfigure(0, weight=1, minsize=200)
-        self.columnconfigure(1, weight=3)
+        self.columnconfigure(0, weight=0, minsize=220)
+        self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
 
         # ── Left panel (folders + lists) ────────────────────────────
@@ -80,6 +125,13 @@ class LibraryTab(ctk.CTkFrame):
         self._folders_frame = ctk.CTkScrollableFrame(left, height=150)
         self._folders_frame.grid(row=1, column=0, sticky="nsew", padx=10)
         left.rowconfigure(1, weight=1)
+        def _hide_folders_sb(canvas=self._folders_frame._parent_canvas, sb=self._folders_frame._scrollbar):
+            bbox = canvas.bbox("all")
+            if bbox and (bbox[3] - bbox[1]) > canvas.winfo_height():
+                sb.grid()
+            else:
+                sb.grid_remove()
+        self._folders_frame._parent_canvas.bind("<Configure>", lambda _: self.after(0, _hide_folders_sb))
 
         folder_btn_row = ctk.CTkFrame(left, fg_color="transparent")
         folder_btn_row.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 0))
@@ -89,44 +141,58 @@ class LibraryTab(ctk.CTkFrame):
         new_folder_btn.pack(side="left", padx=(0, 4))
         Tooltip(new_folder_btn, "Create a new folder to organize your saved lists.")
 
-        rename_btn = ctk.CTkButton(
-            folder_btn_row, text="Rename", width=80, command=self._rename_folder
+        self._rename_folder_btn = ctk.CTkButton(
+            folder_btn_row, text="Rename", width=80, command=self._rename_folder,
+            state="disabled", fg_color=("gray60", "gray40"),
         )
-        rename_btn.pack(side="left", padx=(0, 4))
-        Tooltip(rename_btn, "Rename the selected folder.")
+        self._rename_folder_btn.pack(side="left", padx=(0, 4))
+        Tooltip(self._rename_folder_btn, "Rename the selected folder.")
 
-        del_folder_btn = ctk.CTkButton(
+        self._del_folder_btn = ctk.CTkButton(
             folder_btn_row, text="Delete", width=70, command=self._delete_folder,
-            fg_color=_CLR_BTN_DANGER,
+            fg_color=("gray60", "gray40"), state="disabled",
+            hover_color=_CLR_BTN_DANGER_HOVER,
         )
-        del_folder_btn.pack(side="left")
-        Tooltip(del_folder_btn, "Delete the selected folder. Lists inside are moved to Root.")
+        self._del_folder_btn.pack(side="left")
+        Tooltip(self._del_folder_btn, "Delete the selected folder. Lists inside are released to 🏠 Home, or optionally deleted.")
 
-        ctk.CTkLabel(
+        self._lists_header_label = ctk.CTkLabel(
             left, text="LISTS", font=ctk.CTkFont(size=12, weight="bold")
-        ).grid(row=3, column=0, sticky="w", padx=10, pady=(12, 4))
+        )
+        self._lists_header_label.grid(row=3, column=0, sticky="w", padx=10, pady=(12, 4))
 
         self._lists_frame = ctk.CTkScrollableFrame(left, height=150)
         self._lists_frame.grid(row=4, column=0, sticky="nsew", padx=10)
         left.rowconfigure(4, weight=1)
+        def _hide_lists_sb(canvas=self._lists_frame._parent_canvas, sb=self._lists_frame._scrollbar):
+            bbox = canvas.bbox("all")
+            if bbox and (bbox[3] - bbox[1]) > canvas.winfo_height():
+                sb.grid()
+            else:
+                sb.grid_remove()
+            if self._lists_placeholder_active:
+                canvas.itemconfigure(self._lists_frame._create_window_id,
+                                     height=canvas.winfo_height(),
+                                     width=canvas.winfo_width())
+        self._lists_frame._parent_canvas.bind("<Configure>", lambda _: self.after(0, _hide_lists_sb))
 
         list_btn_row = ctk.CTkFrame(left, fg_color="transparent")
         list_btn_row.grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 10))
         list_btn_row.columnconfigure(0, weight=1)
         list_btn_row.columnconfigure(1, weight=1)
 
-        rename_list_btn = ctk.CTkButton(
-            list_btn_row, text="Rename", command=self._rename_list
+        self._rename_list_btn = ctk.CTkButton(
+            list_btn_row, text="Rename", command=self._rename_list, state="disabled"
         )
-        rename_list_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        Tooltip(rename_list_btn, "Rename the selected list.")
+        self._rename_list_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        Tooltip(self._rename_list_btn, "Rename the selected list.")
 
-        del_list_btn = ctk.CTkButton(
+        self._del_list_btn = ctk.CTkButton(
             list_btn_row, text="Delete", command=self._delete_list,
-            fg_color=_CLR_BTN_DANGER,
+            fg_color=("gray60", "gray40"), state="disabled",
         )
-        del_list_btn.grid(row=0, column=1, sticky="ew")
-        Tooltip(del_list_btn, "Permanently delete the selected list from the library.")
+        self._del_list_btn.grid(row=0, column=1, sticky="ew")
+        Tooltip(self._del_list_btn, "Permanently delete the selected list from the library.")
 
         self._combine_sel_btn = ctk.CTkButton(
             left, text="Combine Selected", command=self._combine_selected,
@@ -136,16 +202,11 @@ class LibraryTab(ctk.CTkFrame):
         Tooltip(self._combine_sel_btn, "Merge 2+ selected lists into a new combined list (Ctrl+click to multi-select).")
 
         self._refetch_btn = ctk.CTkButton(
-            left, text="Re-fetch Sources", command=self._refetch_selected
+            left, text="Re-fetch Sources", command=self._refetch_selected, state="disabled"
         )
         self._refetch_btn.grid(row=7, column=0, sticky="ew", padx=10, pady=(4, 2))
         Tooltip(self._refetch_btn, "Re-fetch all sources and rebuild the selected lists with fresh data.")
 
-        self._refresh_credits_btn = ctk.CTkButton(
-            left, text="Refresh Credits", command=self._refresh_credits
-        )
-        self._refresh_credits_btn.grid(row=8, column=0, sticky="ew", padx=10, pady=(4, 2))
-        Tooltip(self._refresh_credits_btn, "Re-extract credit info from source URLs for all saved lists.")
 
         self._progress_label = ctk.CTkLabel(left, text="", font=ctk.CTkFont(size=11))
         self._progress_bar = ctk.CTkProgressBar(left)
@@ -154,18 +215,51 @@ class LibraryTab(ctk.CTkFrame):
         # ── Right panel (content viewer) ────────────────────────────
         right = ctk.CTkFrame(self)
         right.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
-        right.rowconfigure(1, weight=1)
+        right.rowconfigure(0, weight=1)
         right.columnconfigure(0, weight=1)
 
-        lib_hdr = ctk.CTkFrame(right, fg_color="transparent")
-        lib_hdr.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 6))
-        ctk.CTkLabel(
-            lib_hdr, text="LIST CONTENTS", font=ctk.CTkFont(size=13, weight="bold")
-        ).pack(side="left")
+        # Action buttons row (below content viewer)
+        action_row = ctk.CTkFrame(right, fg_color="transparent")
+        action_row.grid(row=1, column=0, sticky="w", padx=10, pady=(6, 4))
 
-        self._content_box = ctk.CTkTextbox(right, state="disabled", wrap="none",
-                                            text_color=("gray10", "gray90"))
-        self._content_box.grid(row=1, column=0, sticky="nsew", padx=10)
+        self._open_btn = ctk.CTkButton(action_row, text="Open", width=70, state="disabled",
+                                       command=self._open_list)
+        self._open_btn.pack(side="left", padx=(0, 6))
+        Tooltip(self._open_btn, "Load the selected list's content into the viewer.")
+
+        self._copy_btn = ctk.CTkButton(action_row, text="Copy", width=70, state="disabled",
+                                       command=self._copy_content)
+        self._copy_btn.pack(side="left", padx=(0, 6))
+        Tooltip(self._copy_btn, "Copy the list contents to the clipboard.")
+
+        self._export_btn = ctk.CTkButton(action_row, text="Export", width=70, state="disabled",
+                                         command=self._export)
+        self._export_btn.pack(side="left", padx=(0, 6))
+        Tooltip(self._export_btn, "Export File — save the list as a .txt file to disk.")
+
+        self._load_btn = ctk.CTkButton(action_row, text="Load", width=70, state="disabled",
+                                       command=self._load_into_combiner)
+        self._load_btn.pack(side="left", padx=(0, 6))
+        Tooltip(self._load_btn, "Load into Combiner — add this list as a source in the Combine tab.")
+
+        self._push_btn = ctk.CTkButton(
+            action_row, text="Push", width=70, command=self._push_to_server, state="disabled",
+            fg_color=("gray60", "gray40"),
+        )
+        self._push_btn.pack(side="left")
+        self._push_tooltip = Tooltip(self._push_btn,
+                                     "No server configured — add URL and API key in Settings.")
+        self._push_btn.bind("<Enter>", self._on_push_enter, add="+")
+        self._push_btn.bind("<Leave>", self._on_push_leave, add="+")
+
+        self._content_box = ctk.CTkTextbox(right, wrap="none", text_color="gray50", cursor="arrow")
+        self._content_box.grid(row=0, column=0, sticky="nsew", padx=10, pady=(10, 0))
+        self._content_box.tag_config("placeholder", justify="center")
+        self._content_box.insert("1.0", "Open a list to preview its contents here", "placeholder")
+        self._content_box.configure(state="disabled")
+        self._content_box.bind("<B1-Motion>",
+                               lambda e: "break" if not self._content_has_content else None, add="+")
+        self._content_box.bind("<Configure>", self._on_content_box_resize, add="+")
 
         # Right-click context menu for the content viewer
         self._ctx_menu = _tk.Menu(self, tearoff=0)
@@ -173,60 +267,30 @@ class LibraryTab(ctk.CTkFrame):
         self._ctx_menu.add_command(label="Select All", command=self._ctx_select_all)
         self._content_box.bind("<Button-3>", self._show_ctx_menu)
 
-        stats_row = ctk.CTkFrame(right, fg_color="transparent")
-        stats_row.grid(row=2, column=0, sticky="ew", padx=10, pady=(6, 0))
-        self._lib_domains_label = ctk.CTkLabel(stats_row, text="Domains: —")
-        self._lib_domains_label.pack(side="left", padx=(0, 16))
-        self._lib_dupes_label = ctk.CTkLabel(stats_row, text="Duplicates removed: —")
-        self._lib_dupes_label.pack(side="left")
-
         timestamp_row = ctk.CTkFrame(right, fg_color="transparent")
-        timestamp_row.grid(row=2, column=0, sticky="e", padx=10, pady=(6, 0))
+        timestamp_row.grid(row=2, column=0, sticky="e", padx=10, pady=(2, 0))
         self._lib_timestamp_label = ctk.CTkLabel(
             timestamp_row, text="", text_color=("gray15", "gray60"), font=ctk.CTkFont(size=11)
         )
         self._lib_timestamp_label.pack(side="right")
 
-        action_row = ctk.CTkFrame(right, fg_color="transparent")
-        action_row.grid(row=3, column=0, sticky="w", padx=10, pady=10)
-        open_btn = ctk.CTkButton(action_row, text="Open", width=75, command=self._open_list)
-        open_btn.pack(side="left", padx=(0, 8))
-        Tooltip(open_btn, "Load the selected list's content into the viewer.")
-
-        export_btn = ctk.CTkButton(action_row, text="Export File...", width=100, command=self._export)
-        export_btn.pack(side="left", padx=(0, 8))
-        Tooltip(export_btn, "Export the list as a .txt file to disk.")
-
-        load_btn = ctk.CTkButton(
-            action_row,
-            text="Load into Combiner", width=130,
-            command=self._load_into_combiner,
-        )
-        load_btn.pack(side="left", padx=(0, 8))
-        Tooltip(load_btn, "Add this list as a source in the Combine tab to merge with other lists.")
-
-        copy_btn = ctk.CTkButton(action_row, text="Copy", width=65, command=self._copy_content)
-        copy_btn.pack(side="left", padx=(0, 8))
-        Tooltip(copy_btn, "Copy the list contents to the clipboard.")
-
-        # Move row (folder dropdown + Move + Push to Server)
+        # Move row (folder dropdown + Move)
         move_row = ctk.CTkFrame(right, fg_color="transparent")
-        move_row.grid(row=4, column=0, sticky="w", padx=10, pady=(0, 4))
-        self._move_folder_var = ctk.StringVar(value="🏠 Root")
+        move_row.grid(row=3, column=0, sticky="ew", padx=10, pady=(4, 8))
+        self._move_folder_var = ctk.StringVar(value="🏠 Home")
         self._move_menu = ctk.CTkOptionMenu(
-            move_row, variable=self._move_folder_var, values=["🏠 Root"], width=160
+            move_row, variable=self._move_folder_var, values=["🏠 Home"], width=160,
+            state="disabled", command=self._on_move_folder_pick,
         )
         self._move_menu.pack(side="left", padx=(0, 8))
         Tooltip(self._move_menu, "Select a folder to move the selected list into.")
-        move_btn = ctk.CTkButton(move_row, text="Move", width=70, command=self._move_list)
-        move_btn.pack(side="left", padx=(0, 8))
-        Tooltip(move_btn, "Move the selected list to a different folder. Doesn't change content.")
-        self._push_btn = ctk.CTkButton(
-            move_row, text="Push to Server", width=130, command=self._push_to_server, state="disabled",
-        )
-        self._push_btn.pack(side="left", padx=(0, 8))
-        Tooltip(self._push_btn,
-                "Upload this list to the configured remote phlist-server via HTTP PUT.")
+        self._move_menu.bind("<Enter>", self._on_move_menu_enter, add="+")
+        self._move_menu.bind("<Leave>", self._on_move_menu_leave, add="+")
+        self._move_btn = ctk.CTkButton(move_row, text="Move", width=70, state="disabled",
+                                       command=self._move_list)
+        self._move_btn.pack(side="left", padx=(0, 8))
+        Tooltip(self._move_btn, "Move the selected list to a different folder. Doesn't change content.")
+
 
     # ── Refresh helpers ──────────────────────────────────────────────
 
@@ -234,12 +298,6 @@ class LibraryTab(ctk.CTkFrame):
         self._refresh_folders()
         self._refresh_lists()
         self._refresh_move_menu()
-        if self._refresh_stats_cb:
-            self._refresh_stats_cb()
-
-    def _do_refresh_stats(self) -> None:
-        if self._refresh_stats_cb:
-            self._refresh_stats_cb()
 
     def _refresh_folders(self) -> None:
         for w in self._folders_frame.winfo_children():
@@ -248,7 +306,7 @@ class LibraryTab(ctk.CTkFrame):
         # Virtual root entry (unfiled lists, not a real DB folder)
         root_btn = ctk.CTkButton(
             self._folders_frame,
-            text="🏠 Root",
+            text="🏠 Home",
             anchor="w",
             fg_color=(
                 _CLR_SELECTED if self._selected_folder_id is None else _CLR_UNSELECTED
@@ -296,8 +354,36 @@ class LibraryTab(ctk.CTkFrame):
     def _refresh_lists(self) -> None:
         for w in self._lists_frame.winfo_children():
             w.destroy()
+        # Reset inner frame to content-driven height
+        self._lists_frame._parent_canvas.itemconfigure(
+            self._lists_frame._create_window_id, height=0)
 
-        for item in self._db.get_lists(self._selected_folder_id):
+        items = self._db.get_lists(self._selected_folder_id)
+        if not items:
+            self._lists_placeholder_active = True
+            self._lists_header_label.grid_remove()
+            if self._selected_folder_id is None:
+                placeholder = "Combine sources and save\nto library to see\nyour lists here"
+            else:
+                placeholder = "No lists in this folder"
+            ctk.CTkLabel(
+                self._lists_frame,
+                text=placeholder,
+                text_color="gray50",
+                anchor="center",
+                justify="center",
+                wraplength=160,
+            ).pack(expand=True, fill="both")
+            def _stretch():
+                c = self._lists_frame._parent_canvas
+                c.itemconfigure(self._lists_frame._create_window_id,
+                                height=c.winfo_height(), width=c.winfo_width())
+            self.after(0, _stretch)
+            return
+        self._lists_placeholder_active = False
+        self._lists_header_label.grid()
+
+        for item in items:
             lid = item["id"]
             date_str = self._fmt_date(item.get("updated_at") or item.get("created_at", ""))
             label = f"{item['name']}  ({date_str})" if date_str else item["name"]
@@ -317,8 +403,9 @@ class LibraryTab(ctk.CTkFrame):
 
     def _refresh_move_menu(self) -> None:
         folders = self._db.get_folders()
-        names = ["🏠 Root"] + [f["name"] for f in folders]
-        self._move_folder_map = {"🏠 Root": None, **{f["name"]: f["id"] for f in folders}}
+        self._move_folder_map = {"🏠 Home": None}
+        self._move_folder_map.update({f["name"]: f["id"] for f in folders})
+        names = list(self._move_folder_map.keys())
         self._move_menu.configure(values=names)
 
     # ── Folder actions ───────────────────────────────────────────────
@@ -326,6 +413,15 @@ class LibraryTab(ctk.CTkFrame):
     def _select_folder(self, folder_id: Optional[int]) -> None:
         self._selected_folder_id = folder_id
         self._selected_list_ids.clear()
+        is_real_folder = folder_id is not None
+        self._rename_folder_btn.configure(
+            state="normal" if is_real_folder else "disabled",
+            fg_color=_CLR_BTN_DEFAULT if is_real_folder else ("gray60", "gray40"),
+        )
+        self._del_folder_btn.configure(
+            state="normal" if is_real_folder else "disabled",
+            fg_color=_CLR_BTN_DANGER if is_real_folder else ("gray60", "gray40"),
+        )
         self._refresh_folders()
         self._refresh_lists()
         self._update_combine_btn()
@@ -334,8 +430,8 @@ class LibraryTab(ctk.CTkFrame):
     def _new_folder(self) -> None:
         name = simpledialog.askstring("New Folder", "Folder name:", parent=self)
         if name and name.strip():
-            if name.strip().lower() == "root":
-                messagebox.showwarning("Reserved name", '"Root" is reserved — choose a different name.', parent=self)
+            if name.strip().lower() in ("root", "home"):
+                messagebox.showwarning("Reserved name", '"Home" is reserved — choose a different name.', parent=self)
                 return
             self._db.create_folder(name.strip())
             self.refresh()
@@ -346,24 +442,30 @@ class LibraryTab(ctk.CTkFrame):
             return
         new_name = simpledialog.askstring("Rename Folder", "New name:", parent=self)
         if new_name and new_name.strip():
-            if new_name.strip().lower() == "root":
-                messagebox.showwarning("Reserved name", '"Root" is reserved — choose a different name.', parent=self)
+            if new_name.strip().lower() in ("root", "home"):
+                messagebox.showwarning("Reserved name", '"Home" is reserved — choose a different name.', parent=self)
                 return
             self._db.rename_folder(self._selected_folder_id, new_name.strip())
             self.refresh()
 
     def _delete_folder(self) -> None:
         if self._selected_folder_id is None:
-            messagebox.showinfo("Select a folder", 'Select a folder to delete.\n\n"🏠 Root" is the default location and cannot be deleted.')
+            messagebox.showinfo("Select a folder", '"🏠 Home" is the default location and cannot be deleted.')
             return
-        if messagebox.askyesno(
-            "Delete folder",
-            "Delete this folder? Lists inside will be moved to 🏠 Root.",
-            parent=self,
-        ):
-            self._db.delete_folder(self._selected_folder_id)
-            self._selected_folder_id = None
-            self.refresh()
+        # Look up folder name for the dialog
+        folders = {f["id"]: f["name"] for f in self._db.get_folders()}
+        folder_name = folders.get(self._selected_folder_id, "this folder")
+        dlg = _DeleteFolderDialog(self, folder_name)
+        self.wait_window(dlg)
+        if not dlg.confirmed:
+            return
+        if dlg.delete_lists:
+            for lst in self._db.get_lists(folder_id=self._selected_folder_id):
+                self._db.delete_list(lst["id"])
+        self._db.delete_folder(self._selected_folder_id)
+        self._selected_folder_id = None
+        self._selected_list_ids.clear()
+        self.refresh()
 
     # ── List actions ─────────────────────────────────────────────────
 
@@ -372,8 +474,6 @@ class LibraryTab(ctk.CTkFrame):
         self._selected_list_ids = {list_id}
         self._refresh_lists()
         self._update_combine_btn()
-        remote_url = self._db.get_setting("remote_server_url", "")
-        self._push_btn.configure(state="normal" if remote_url else "disabled")
 
     def _toggle_select_list(self, list_id: int) -> None:
         """Ctrl+click: toggle a list in/out of the multi-selection."""
@@ -385,9 +485,55 @@ class LibraryTab(ctk.CTkFrame):
         self._update_combine_btn()
 
     def _update_combine_btn(self) -> None:
-        """Enable Combine Selected when 2+ lists are selected."""
-        state = "normal" if len(self._selected_list_ids) >= 2 else "disabled"
-        self._combine_sel_btn.configure(state=state)
+        """Update selection-dependent button states."""
+        n = len(self._selected_list_ids)
+        self._combine_sel_btn.configure(state="normal" if n >= 2 else "disabled")
+        any_sel = "normal" if n >= 1 else "disabled"
+        self._refetch_btn.configure(state=any_sel)
+        self._rename_list_btn.configure(state=any_sel)
+        self._del_list_btn.configure(
+            state=any_sel,
+            fg_color=_CLR_BTN_DANGER if n >= 1 else ("gray60", "gray40"),
+            hover_color=_CLR_BTN_DANGER_HOVER if n >= 1 else ("gray55", "gray35"),
+        )
+        self._open_btn.configure(state=any_sel)
+        self._copy_btn.configure(state=any_sel)
+        self._load_btn.configure(state=any_sel)
+        has_folders = bool(self._move_folder_map)
+        menu_enabled = n >= 1 and has_folders
+        if not menu_enabled:
+            self._move_folder_picked = False
+        self._move_menu.configure(
+            state="normal" if menu_enabled else "disabled",
+            fg_color=(
+                _CLR_BTN_DEFAULT if (menu_enabled and self._move_folder_picked)
+                else ("gray60", "gray40")
+            ),
+            button_color=(
+                _CLR_BTN_DEFAULT if (menu_enabled and self._move_folder_picked)
+                else ("gray55", "gray35")
+            ),
+            text_color=(
+                ("gray10", "#DCE4EE") if menu_enabled else ("gray70", "gray55")
+            ),
+        )
+        self._move_btn.configure(state="disabled")  # enabled only after folder is picked
+        self._export_btn.configure(state=any_sel)
+        remote_url = self._db.get_setting("remote_server_url", "")
+        if n >= 1 and remote_url and self._server_reachable:
+            self._push_btn.configure(state="normal", fg_color=_CLR_BTN_DEFAULT)
+            self._push_tooltip.update("Push to Server — upload to your phlist-server instance.")
+        elif n >= 1 and remote_url:
+            # URL set but not verified — grey at rest, blue on hover
+            self._push_btn.configure(state="normal", fg_color=("gray60", "gray40"))
+            self._push_tooltip.update("Connection not verified — go to Settings to test first.")
+        else:
+            self._push_btn.configure(state="disabled", fg_color=("gray60", "gray40"))
+            self._push_tooltip.update(
+                "No server configured — add URL and API key in Settings → Remote Server."
+                if not remote_url else
+                "Select a list and verify the connection in Settings first."
+            )
 
     def _open_list(self) -> None:
         """Load the selected list's content into the viewer."""
@@ -401,7 +547,8 @@ class LibraryTab(ctk.CTkFrame):
         root.configure(cursor="watch")
         root.update_idletasks()
         try:
-            self._content_box.configure(state="normal")
+            self._content_has_content = True
+            self._content_box.configure(state="normal", text_color=("gray10", "gray90"), cursor="")
             self._content_box.delete("1.0", "end")
             content = row["content"]
             lines = content.split("\n")
@@ -413,10 +560,6 @@ class LibraryTab(ctk.CTkFrame):
                 display = content
             self._content_box.insert("1.0", display)
             self._content_box.configure(state="disabled")
-            self._lib_domains_label.configure(text=f"Domains: {row['domain_count']}")
-            self._lib_dupes_label.configure(
-                text=f"Duplicates removed: {row['duplicates_removed']}"
-            )
             created = self._fmt_date(row.get("created_at", ""))
             updated = self._fmt_date(row.get("updated_at", ""))
             if updated:
@@ -427,6 +570,30 @@ class LibraryTab(ctk.CTkFrame):
                 self._lib_timestamp_label.configure(text="")
         finally:
             root.configure(cursor="")
+
+    def _show_content_placeholder(self) -> None:
+        """Insert vertically + horizontally centered placeholder in the content viewer."""
+        import tkinter.font as _tkfont
+        text = "Open a list to preview its contents here"
+        self._content_has_content = False
+        self._content_box.configure(state="normal", text_color="gray50", cursor="arrow")
+        self._content_box.delete("1.0", "end")
+        box_h = self._content_box._textbox.winfo_height()
+        try:
+            f = _tkfont.Font(font=self._content_box._textbox.cget("font"))
+            line_h = f.metrics("linespace")
+        except Exception:
+            line_h = 16
+        blank = max(0, (box_h // max(line_h, 1)) // 2 - 1) if box_h > line_h else 0
+        self._content_box.insert("1.0", "\n" * blank + text, "placeholder")
+        self._content_box.configure(state="disabled")
+
+    def _on_content_box_resize(self, _event=None) -> None:
+        if self._content_has_content:
+            return
+        if hasattr(self, "_content_ph_after"):
+            self.after_cancel(self._content_ph_after)
+        self._content_ph_after = self.after(50, self._show_content_placeholder)
 
     def _rename_list(self) -> None:
         if self._selected_list_id is None:
@@ -445,11 +612,7 @@ class LibraryTab(ctk.CTkFrame):
             lid = self._selected_list_id
             self._db.delete_list(lid)
             self._selected_list_ids.discard(lid)
-            self._content_box.configure(state="normal")
-            self._content_box.delete("1.0", "end")
-            self._content_box.configure(state="disabled")
-            self._lib_domains_label.configure(text="Domains: —")
-            self._lib_dupes_label.configure(text="Duplicates removed: —")
+            self._show_content_placeholder()
             self._refresh_lists()
             self._update_combine_btn()
 
@@ -530,7 +693,7 @@ class LibraryTab(ctk.CTkFrame):
         def _worker():
             ok, msg = _push_list(url, key, slug, content)
             def _done():
-                self._push_btn.configure(state="normal", text="Push to Server")
+                self._push_btn.configure(state="normal", text="Push")
                 if ok:
                     messagebox.showinfo("Pushed", f"{row['name']} → {url}/lists/{slug}.txt")
                 else:
@@ -645,24 +808,59 @@ class LibraryTab(ctk.CTkFrame):
         else:
             messagebox.showinfo("Re-fetch complete", msg)
 
+    def _on_move_folder_pick(self, _value: str) -> None:
+        """Enable the Move button and lock dropdown blue once a folder is chosen."""
+        if self._selected_list_ids and _value in self._move_folder_map:
+            self._move_folder_picked = True
+            self._move_menu.configure(
+                fg_color=_CLR_BTN_DEFAULT, button_color=_CLR_BTN_DEFAULT,
+            )
+            self._move_btn.configure(state="normal")
+
+    def _on_move_menu_enter(self, _event=None) -> None:
+        """Highlight dropdown blue on hover when armed but not yet picked."""
+        if self._selected_list_ids and not self._move_folder_picked:
+            self._move_menu.configure(
+                fg_color=_CLR_BTN_DEFAULT, button_color=_CLR_BTN_DEFAULT,
+            )
+
+    def _on_move_menu_leave(self, _event=None) -> None:
+        """Revert to grey on leave if no folder has been picked yet."""
+        if not self._move_folder_picked:
+            self._move_menu.configure(
+                fg_color=("gray60", "gray40"), button_color=("gray55", "gray35"),
+            )
+
+    def _on_push_enter(self, _event=None) -> None:
+        remote_url = self._db.get_setting("remote_server_url", "")
+        if self._selected_list_ids and remote_url and not self._server_reachable:
+            self._push_btn.configure(fg_color=_CLR_BTN_DEFAULT)
+
+    def _on_push_leave(self, _event=None) -> None:
+        if not self._server_reachable:
+            self._push_btn.configure(fg_color=("gray60", "gray40"))
+
+    def set_server_reachable(self, ok: bool) -> None:
+        """Called when connection test result changes."""
+        self._server_reachable = ok
+        self._update_combine_btn()
+
     def _move_list(self) -> None:
         if self._selected_list_id is None:
-            messagebox.showinfo("Select a list", "Select a list to move.")
             return
         folder_name = self._move_folder_var.get()
-        folder_id = self._move_folder_map.get(folder_name)
+        if folder_name not in self._move_folder_map:
+            return
+        folder_id = self._move_folder_map[folder_name]
         self._db.move_list(self._selected_list_id, folder_id)
         self._refresh_lists()
         messagebox.showinfo("Moved", f"List moved to {folder_name}.")
 
     # ── Refresh Credits ────────────────────────────────────────────────
 
-    def _refresh_credits(self) -> None:
-        """Re-extract credits from source URLs for selected lists."""
-        if not self._selected_list_ids:
-            messagebox.showinfo("Select lists", "Select one or more lists first.")
-            return
-        rows = [self._db.get_list(lid) for lid in self._selected_list_ids]
+    def refresh_all_credits(self) -> None:
+        """Re-extract credits from source URLs for every list in the library."""
+        rows = self._db.get_all_lists()
         rows = [r for r in rows if r]
         updated = 0       # credits written/updated
         already_had = 0   # already had credits — nothing to do

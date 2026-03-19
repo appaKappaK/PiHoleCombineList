@@ -1,6 +1,6 @@
 # Block/Allowlist Combiner for Pi-hole
 
-A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blocklists from URLs, local files, or pasted text — then combines them into a single optimized list ready to push directly to Pi-hole.
+A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blocklists from URLs, local files, or pasted text — then combines them into a single optimized list ready to push directly to Pi-hole via [phlist-server](https://github.com/appaKappaK/phlist-server).
 
 > **Note:** Releases may not reflect the latest changes. Clone the repo for the newest features.
 
@@ -17,11 +17,12 @@ A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blo
   - Pipe-delimited: `example.com | comment`
 - Deduplicates across all sources — shows unique domain count and duplicates removed
 - Progress bar and per-source status during combine
+- **COMBINE ALL flash** — button flashes green on success, red on failure, then resets after 2 seconds
+- **Push to phlist-server** — push combined lists directly to your phlist-server instance; Push button turns green when the server is reachable and output is ready
+- **Connection polling** — after a manual Test Connection, silently re-checks every 60 seconds so the button auto-updates if the server goes down
 - Save combined lists to a local library organized in folders
 - Load saved lists back into the combiner to merge with new sources
-- **Host List** — hosts combined lists over HTTP on your LAN so Pi-hole can pull them directly via gravity; name each hosted file (e.g. `general.txt`, `tvs.txt`) so multiple lists can be hosted simultaneously at different URLs for Pi-hole group management
-- **Host from Library** — host any saved list directly from the Library tab without re-combining
-- **Re-fetch Sources** — re-fetch source URLs for selected lists and rebuild them with fresh data; works with single or multi-select, with a progress bar; auto-refreshes hosted content
+- **Re-fetch Sources** — re-fetch source URLs for selected lists and rebuild them with fresh data; works with single or multi-select, with a progress bar
 - **Combine Selected** — multi-select lists in the Library (Ctrl+click) and merge them into one deduplicated list
 - **Refresh Credits** — retroactively extract author credits from source URLs for older saved lists
 - **Fetch cache** — re-combining after adding a few new sources skips re-downloading previously fetched URLs
@@ -50,24 +51,26 @@ phlist
 
 The app opens with three tabs:
 
-- **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, export, or push to Pi-hole
+- **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, export, or push to your phlist-server
 - **Library** — browse saved lists organized in folders, view contents, export, update from sources, or load back into the combiner
-- **Settings** — two-column card layout: appearance (Light/Dark/System), server port, list type toggle, combine defaults (timeout + filename), library stats, inline log viewer, desktop shortcut installer, and database export/import — all settings persist across restarts
+- **Settings** — two-column card layout: Remote Server (URL + API key + Test Connection), combine defaults (timeout + filename), library stats, inline log viewer, desktop shortcut installer, and database export/import — all settings persist across restarts
 
 > **Note:** The Blocklist/Allowlist toggle only changes the output header label — it does not affect how Pi-hole processes the list. Blocklists and allowlists should be added on the **Lists** tab in Pi-hole's dashboard.
 
 ### Pushing to Pi-hole
 
-1. Build your combined list in the Combine tab
-2. Optionally type a filename (e.g. `general`) — leave blank for the default `blocklist.txt`
-3. Click **Host List** — the `●` indicator turns green and a URL appears (e.g. `http://YOUR.IP.GO.HERE:8765/general.txt`)
-4. Copy the URL and add it on Pi-hole's **Lists** tab
-5. Run **Update Gravity** in Pi-hole — it fetches and caches the list
-6. Click **Stop Hosting** or close the app — Pi-hole retains the list from its gravity cache
+This app pairs with [phlist-server](https://github.com/appaKappaK/phlist-server) — a lightweight HTTP server that hosts your combined lists for Pi-hole to pull via gravity.
 
-> Pi-hole and your PC just need to be on the same local network. The server defaults to port **8765**.
+1. Deploy **phlist-server** on your LAN (see its README for setup)
+2. In **Settings → Remote Server**, enter the server URL and API key, then click **Save**
+3. Click **Test Connection** — once verified, the app polls the server every 60 seconds for the rest of the session so the status stays current
+4. Build your combined list in the **Combine** tab — the **Push** button turns green when the server is reachable and output is ready
+5. Click **Push**, enter a slug (e.g. `blocklist`) — the list is uploaded to `{server}/lists/blocklist.txt`
+6. Add that URL to Pi-hole's **Lists** tab and run **Update Gravity**
 
-> **Tip:** To use Pi-hole's group management, build separate lists (e.g. one for general devices, one for smart TVs) and host each with a different filename. Each URL is a separate list entry in Pi-hole that can be assigned to different groups.
+> Pi-hole and your phlist-server just need to be on the same local network.
+
+> **Tip:** To use Pi-hole's group management, build separate lists (e.g. one for general devices, one for smart TVs) and push each with a different slug. Each URL is a separate list entry in Pi-hole that can be assigned to different groups.
 
 ### Output format
 
@@ -109,7 +112,7 @@ src/phlist/
     app.py            — Main window, tab wiring, splash screen
     combine_tab.py    — Combine tab + URL/credit extraction + fetch cache
     library_tab.py    — Library tab + multi-select + combine selected
-    settings_tab.py   — Settings tab
+    settings_tab.py   — Settings tab + connection polling
     tooltip.py        — Hover tooltip widget for buttons and inputs
   combiner.py         — Orchestrates fetch → parse → deduplicate
   updater.py          — Re-fetches sources and re-combines a saved list
@@ -117,7 +120,7 @@ src/phlist/
   parser.py           — Extracts/validates domains from all supported formats
   deduplicator.py     — Tracks unique domains and duplicate count
   database.py         — SQLite library (folders + saved lists + settings)
-  server.py           — LAN HTTP server for Pi-hole gravity integration
+  remote.py           — Push lists to phlist-server + connection health check
   logger.py           — Rotating log file setup
   _install_desktop.py — Linux desktop shortcut installer
   assets/             — SVG/PNG icons, splash logo, .desktop file
@@ -126,7 +129,6 @@ tests/
   test_fetcher.py
   test_combiner.py
   test_database.py
-  test_server.py
   test_updater.py
   test_stress.py
 scripts/
@@ -167,15 +169,16 @@ pytest tests/
 - `customtkinter`
 - `Pillow` (splash screen logo)
 - SQLite (Python stdlib)
-- `http.server` / `socket` (Python stdlib — no extra install needed for Host List)
 
-## What's new in v1.8.3
+## What's new in v2.0.0
 
-- **Settings tab overhaul** — two-column card layout with visible section borders, library stats panel, inline log viewer, fetch timeout and default filename settings, appearance toggle (Light/Dark/System)
-- **Export / Import database** — back up and restore your entire library as a `.db` file from the Settings tab; import applies live without a restart
-- **Open Data Folder** — one-click access to `~/.local/share/phlist/` from Settings
-- **Security hardening** — 50 MB response size cap, null-byte stripping from fetched content, SSRF protection (redirects to private IPs are rejected), unicode bidi-override and zero-width character sanitization on all saved names
-- **Test suite expanded** — 106 → 123 tests covering previously untested paths and all new security behaviour
-- **Package renamed** `piholecombinelist` → `phlist` — consistent with the CLI command; data directory and database migrate automatically on first launch
+- **Dropped self-hosting** — the built-in LAN HTTP server has been removed; the app now pairs exclusively with [phlist-server](https://github.com/appaKappaK/phlist-server) for pushing lists to Pi-hole
+- **Push to phlist-server** — configure a remote server URL and API key in Settings, test the connection, and push combined or library lists directly
+- **Connection polling** — after a manual Test Connection, silently re-checks every 60 seconds so the status stays current
+- **COMBINE ALL flash** — button flashes green on success, red on failure, then resets
+- **Push button states** — green when ready to push, grey when not, red flash on failure
+- **Danger button hover** — destructive buttons stay red on hover instead of flashing blue
+- **Folder action buttons** — Rename and Delete are greyed out when Home is selected
+- **UI polish** — centered placeholder text, sources placeholder on launch, Home-specific placeholder, LISTS header toggling, library button row repositioned
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.

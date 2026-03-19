@@ -111,7 +111,7 @@ class App(ctk.CTk):
         # Hide main window during init
         self.withdraw()
 
-        self.minsize(900, 600)
+        self.minsize(815, 585)
 
         # Set window/taskbar icon
         self._icon = None
@@ -140,10 +140,9 @@ class App(ctk.CTk):
         self._tabs = ctk.CTkTabview(
             self,
             command=self._on_tab_change,
-            # Tab strip: visible in both modes — medium gray (light) / dark gray (dark)
             segmented_button_fg_color=("gray72", "gray22"),
-            segmented_button_selected_color=("gray52", "gray38"),
-            segmented_button_selected_hover_color=("gray46", "gray33"),
+            segmented_button_selected_color=("#3B8ED0", "#1F6AA5"),
+            segmented_button_selected_hover_color=("#36719F", "#144870"),
             segmented_button_unselected_color=("gray72", "gray22"),
             segmented_button_unselected_hover_color=("gray64", "gray28"),
             text_color=("gray10", "gray90"),
@@ -167,7 +166,6 @@ class App(ctk.CTk):
             get_combine_tab_cb=lambda: self._combine_tab,
             switch_to_combine_cb=lambda: self._tabs.set("Combine"),
             list_type_var=self._list_type_var,
-            refresh_stats_cb=lambda: self._settings_tab._refresh_stats() if hasattr(self, '_settings_tab') else None,
         )
         self._library_tab.pack(fill="both", expand=True)
 
@@ -176,7 +174,11 @@ class App(ctk.CTk):
             db=self._db,
             refresh_library_cb=lambda: self._library_tab.refresh(),
             refresh_push_btn_cb=lambda: self._combine_tab.refresh_push_btn_state(),
-            notify_server_reachable_cb=lambda ok: self._combine_tab.set_server_reachable(ok),
+            notify_server_reachable_cb=lambda ok: (
+                self._combine_tab.set_server_reachable(ok),
+                self._library_tab.set_server_reachable(ok),
+            ),
+            refresh_credits_cb=lambda: self._library_tab.refresh_all_credits(),
         )
         self._settings_tab.pack(fill="both", expand=True)
 
@@ -201,6 +203,8 @@ class App(ctk.CTk):
             self._library_tab.refresh()
         elif tab == "Combine":
             self._combine_tab.after(50, self._combine_tab._refit_all_source_labels)
+        elif tab == "Settings":
+            self._settings_tab._refresh_stats()
 
     def _on_close(self) -> None:
         _log.info("App closed")

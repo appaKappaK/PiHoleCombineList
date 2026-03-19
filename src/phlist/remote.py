@@ -48,6 +48,8 @@ def check_connection(base_url: str, api_key: str) -> tuple[bool, str]:
             _log.info("test_connection: %s → %s", url, resp.status)
             return True, f"Connected  ({resp.status} OK)"
     except urllib.error.HTTPError as exc:
+        _log.warning("test_connection: HTTP %s %s for %s", exc.code, exc.reason, url)
         return False, f"HTTP {exc.code}: {exc.reason}"
     except Exception as exc:
+        _log.warning("test_connection: %s", exc)
         return False, str(exc)

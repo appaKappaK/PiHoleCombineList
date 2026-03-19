@@ -1,5 +1,6 @@
 """Settings tab: two-column card layout with appearance, stats, log, and more."""
 
+import logging
 import shutil
 import sqlite3
 import subprocess
@@ -9,6 +10,10 @@ from tkinter import filedialog, messagebox
 from typing import Callable, Optional
 
 import customtkinter as ctk
+
+_log = logging.getLogger(__name__)
+
+_POLL_INTERVAL_MS = 60_000   # silent re-check interval after first manual test
 
 from ..database import Database, _DATA_DIR
 from ..remote import check_connection as _check_connection
@@ -22,6 +27,15 @@ def _format_bytes(n: int) -> str:
             return f"{n:.1f} {unit}" if unit != "B" else f"{n} {unit}"
         n /= 1024
     return f"{n:.1f} TB"
+
+
+def _fmt_count(n: int) -> str:
+    """Compact domain count: 999 → '999', 1200 → '1.2k', 45500000 → '45.5m'."""
+    if n < 1_000:
+        return str(n)
+    if n < 1_000_000:
+        return f"{n / 1_000:.1f}k"
+    return f"{n / 1_000_000:.1f}m"
 
 
 def _card(parent, title: str, subtitle: str = "") -> ctk.CTkFrame:
@@ -46,146 +60,148 @@ class SettingsTab(ctk.CTkFrame):
                  db: Database,
                  refresh_library_cb: Optional[Callable[[], None]] = None,
                  refresh_push_btn_cb: Optional[Callable[[], None]] = None,
-                 notify_server_reachable_cb: Optional[Callable[[bool], None]] = None) -> None:
+                 notify_server_reachable_cb: Optional[Callable[[bool], None]] = None,
+                 refresh_credits_cb: Optional[Callable[[], None]] = None) -> None:
         super().__init__(parent, fg_color="transparent")
         self._db = db
         self._refresh_library_cb = refresh_library_cb
         self._refresh_push_btn_cb = refresh_push_btn_cb
         self._notify_server_reachable_cb = notify_server_reachable_cb
+        self._refresh_credits_cb = refresh_credits_cb
         self._build_ui()
 
     def _build_ui(self) -> None:
         # Scrollable wrapper so nothing clips on small windows
         scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
         scroll.pack(fill="both", expand=True)
-        scroll.columnconfigure(0, weight=1)
-        scroll.columnconfigure(1, weight=1)
+
+        cols = ctk.CTkFrame(scroll, fg_color="transparent")
+        cols.pack(fill="x")
+        cols.columnconfigure(0, weight=1)
+        cols.columnconfigure(1, weight=1)
 
         # ── Left column ────────────────────────────────────────────
-        left = ctk.CTkFrame(scroll, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 4), pady=0)
-
-        # ── DESKTOP INTEGRATION ────────────────────────────────────
-        card = _card(left, "DESKTOP", "Linux app launcher integration")
-        desktop_row = ctk.CTkFrame(card, fg_color="transparent")
-        desktop_row.pack(fill="x", padx=12, pady=12)
-        desktop_btn = ctk.CTkButton(
-            desktop_row, text="Install Desktop Shortcut", width=190,
-            command=self._install_desktop,
-        )
-        desktop_btn.pack(side="left", padx=(0, 8))
-        Tooltip(desktop_btn, "Create a .desktop launcher entry so the app appears in your GNOME/KDE app menu.")
-        self._desktop_status = ctk.CTkLabel(desktop_row, text="", text_color=("gray15", "gray60"))
-        self._desktop_status.pack(side="left")
-
-        # ── LOG VIEWER ─────────────────────────────────────────────
-        card = _card(left, "LOG", "Recent app activity")
-        self._log_box = ctk.CTkTextbox(card, height=120, wrap="none", state="disabled",
-                                        font=ctk.CTkFont(size=11),
-                                        text_color=("gray10", "gray90"))
-        self._log_box.pack(fill="x", padx=12, pady=(8, 6))
-        log_btn_row = ctk.CTkFrame(card, fg_color="transparent")
-        log_btn_row.pack(fill="x", padx=12, pady=(0, 12))
-        ctk.CTkButton(log_btn_row, text="Refresh", width=80, command=self._refresh_log).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(log_btn_row, text="Open Log File", width=110, command=self._open_log).pack(side="left")
-        self._refresh_log()
-
-        # ── Right column ───────────────────────────────────────────
-        right = ctk.CTkFrame(scroll, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew", padx=(4, 0), pady=0)
+        left = ctk.CTkFrame(cols, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
         # ── REMOTE SERVER ──────────────────────────────────────────
-        card = _card(right, "REMOTE SERVER", "Push lists to a phlist-server instance")
+        card = _card(left, "REMOTE SERVER")
+        fields = ctk.CTkFrame(card, fg_color="transparent")
+        fields.pack(fill="x", padx=12, pady=(10, 0))
+        fields.columnconfigure(1, weight=1)
 
-        url_row = ctk.CTkFrame(card, fg_color="transparent")
-        url_row.pack(fill="x", padx=12, pady=(10, 0))
-        ctk.CTkLabel(url_row, text="Server URL:", width=80, anchor="w").pack(side="left", padx=(0, 6))
-        self._remote_url_entry = ctk.CTkEntry(url_row, width=200,
-                                               placeholder_text="http://device.ts.net:8765")
+        ctk.CTkLabel(fields, text="Server URL:", width=90, anchor="w").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 6))
+        self._remote_url_entry = ctk.CTkEntry(fields, placeholder_text="http://device.ts.net:8765")
         saved_url = self._db.get_setting("remote_server_url", "")
         if saved_url:
             self._remote_url_entry.insert(0, saved_url)
-        self._remote_url_entry.pack(side="left")
+        self._remote_url_entry.grid(row=0, column=1, sticky="ew")
         Tooltip(self._remote_url_entry, "Base URL of your phlist-server (LAN IP or Tailscale hostname).")
 
-        key_row = ctk.CTkFrame(card, fg_color="transparent")
-        key_row.pack(fill="x", padx=12, pady=(6, 0))
-        ctk.CTkLabel(key_row, text="API key:", width=80, anchor="w").pack(side="left", padx=(0, 6))
-        self._remote_key_entry = ctk.CTkEntry(key_row, width=200, show="*")
+        ctk.CTkLabel(fields, text="API key:", width=90, anchor="w").grid(row=1, column=0, sticky="w", padx=(0, 6))
+        self._remote_key_entry = ctk.CTkEntry(fields, show="*")
         saved_key = self._db.get_setting("remote_server_key", "")
         if saved_key:
             self._remote_key_entry.insert(0, saved_key)
-        self._remote_key_entry.pack(side="left")
+        self._remote_key_entry.grid(row=1, column=1, sticky="ew")
         Tooltip(self._remote_key_entry, "Bearer token the server requires for PUT requests.")
 
-        save_row = ctk.CTkFrame(card, fg_color="transparent")
-        save_row.pack(fill="x", padx=12, pady=(6, 0))
-        save_remote_btn = ctk.CTkButton(save_row, text="Save", width=70,
-                                         command=self._save_remote_settings)
-        save_remote_btn.pack(side="left", padx=(0, 8))
-
-        self._remote_test_status = ctk.CTkLabel(save_row, text="",
-                                                  font=ctk.CTkFont(size=11),
-                                                  text_color=("gray40", "gray60"))
-        self._remote_test_status.pack(side="left")
-
-        test_row = ctk.CTkFrame(card, fg_color="transparent")
-        test_row.pack(fill="x", padx=12, pady=(4, 0))
-        test_btn = ctk.CTkButton(test_row, text="Test Connection", width=130,
-                                  command=self._test_remote_connection)
-        test_btn.pack(side="left", padx=(0, 8))
-        self._remote_conn_status = ctk.CTkLabel(test_row, text="",
-                                                 font=ctk.CTkFont(size=11),
+        action_row = ctk.CTkFrame(card, fg_color="transparent")
+        action_row.pack(fill="x", padx=12, pady=(8, 12))
+        self._test_conn_btn = ctk.CTkButton(
+            action_row, text="Test Connection", width=130,
+            fg_color=("gray60", "gray40"), hover_color=["#36719F", "#144870"],
+            command=self._test_remote_connection,
+        )
+        self._test_conn_btn.pack(side="left", padx=(0, 8))
+        self._test_conn_tooltip = Tooltip(self._test_conn_btn, "Test your connection to the configured server.")
+        self._remote_conn_status = ctk.CTkLabel(action_row, text="", font=ctk.CTkFont(size=11),
                                                  text_color=("gray40", "gray60"))
         self._remote_conn_status.pack(side="left")
+        self._save_remote_btn = ctk.CTkButton(action_row, text="Save", width=70, command=self._save_remote_settings)
+        self._save_remote_btn.pack(side="right")
+        self._remote_test_status = ctk.CTkLabel(action_row, text="", font=ctk.CTkFont(size=11),
+                                                 text_color=("gray40", "gray60"))
+        self._remote_test_status.pack(side="right", padx=(0, 8))
 
-        autopush_row = ctk.CTkFrame(card, fg_color="transparent")
-        autopush_row.pack(fill="x", padx=12, pady=(6, 10))
-        saved_autopush = self._db.get_setting("remote_auto_push", "0")
-        self._autopush_var = ctk.StringVar(value="1" if saved_autopush == "1" else "0")
-        autopush_switch = ctk.CTkSwitch(
-            autopush_row, text="Auto-push on Save to Library",
-            variable=self._autopush_var, onvalue="1", offvalue="0",
-            command=self._on_autopush_toggle,
-        )
-        autopush_switch.pack(side="left")
-        Tooltip(autopush_switch,
-                "When enabled, saving a combined list to the library also pushes it to the remote server.")
 
-        # ── LIBRARY STATS ──────────────────────────────────────────
-        card = _card(right, "LIBRARY", "Saved lists and folders at a glance")
-        self._stats_labels: dict[str, ctk.CTkLabel] = {}
-        stats_grid = ctk.CTkFrame(card, fg_color="transparent")
-        stats_grid.pack(fill="x", padx=12, pady=(6, 4))
-        for col in range(2):
-            stats_grid.columnconfigure(col, weight=1)
-        positions = [("folders", 0, 0), ("lists", 0, 1), ("domains", 1, 0), ("db_size", 1, 1)]
-        for key, row, col in positions:
-            lbl = ctk.CTkLabel(stats_grid, text="", anchor="w")
-            lbl.grid(row=row, column=col, sticky="w", pady=1)
-            self._stats_labels[key] = lbl
-        refresh_stats_btn = ctk.CTkButton(card, text="Refresh Stats", width=110, command=self._refresh_stats)
-        refresh_stats_btn.pack(anchor="w", padx=12, pady=(4, 10))
-        Tooltip(refresh_stats_btn, "Update the library stats shown here.")
-        self._refresh_stats()
-
-        # ── DATA (full width, compact single row) ─────────────────
-        data_card = ctk.CTkFrame(scroll, border_width=1, border_color=("gray75", "gray30"))
-        data_card.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 10))
-        data_row = ctk.CTkFrame(data_card, fg_color="transparent")
-        data_row.pack(fill="x", padx=12, pady=8)
-        ctk.CTkLabel(
-            data_row, text="DATA", font=ctk.CTkFont(size=13, weight="bold"),
-        ).pack(side="left", padx=(0, 16))
-        export_btn = ctk.CTkButton(data_row, text="Export DB", width=90, command=self._export_db)
-        export_btn.pack(side="left", padx=(0, 8))
-        Tooltip(export_btn, "Save a backup copy of your entire library database (phlist.db).")
+        # ── DATA ───────────────────────────────────────────────────
+        card = _card(left, "DATA")
+        data_row = ctk.CTkFrame(card, fg_color="transparent")
+        data_row.pack(fill="x", padx=12, pady=10)
+        self._export_db_btn = ctk.CTkButton(data_row, text="Export DB", width=90, command=self._export_db)
+        self._export_db_btn.pack(side="left", padx=(0, 8))
+        Tooltip(self._export_db_btn, "Save a backup copy of your entire library database (phlist.db).")
         import_btn = ctk.CTkButton(data_row, text="Import DB", width=90, command=self._import_db)
         import_btn.pack(side="left", padx=(0, 8))
         Tooltip(import_btn, "Restore the library from a previously exported backup. Replaces all current data.")
         folder_btn = ctk.CTkButton(data_row, text="Open Folder", width=100, command=self._open_data_folder)
         folder_btn.pack(side="left")
         Tooltip(folder_btn, f"Open {_DATA_DIR} in the file manager.")
+
+        data_row2 = ctk.CTkFrame(card, fg_color="transparent")
+        data_row2.pack(fill="x", padx=12, pady=(0, 10))
+        reset_lib_btn = ctk.CTkButton(data_row2, text="Reset Library", width=110,
+                                      fg_color=["#C0392B", "#922B21"],
+                                      hover_color=["#A93226", "#7B241C"],
+                                      command=self._reset_db)
+        reset_lib_btn.pack(side="left", padx=(0, 8))
+        Tooltip(reset_lib_btn, "Delete all lists and folders. Settings (server URL, API key, etc.) are kept.")
+        reset_cfg_btn = ctk.CTkButton(data_row2, text="Reset Config", width=110,
+                                      fg_color=["#C0392B", "#922B21"],
+                                      hover_color=["#A93226", "#7B241C"],
+                                      command=self._reset_config)
+        reset_cfg_btn.pack(side="left")
+        Tooltip(reset_cfg_btn, "Clear all settings (server URL, API key, preferences). Library lists are kept.")
+
+        # ── Right column ───────────────────────────────────────────
+        right = ctk.CTkFrame(cols, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+
+        # ── LIBRARY STATS ──────────────────────────────────────────
+        card = _card(right, "LIBRARY")
+        self._stats_labels: dict[str, ctk.CTkLabel] = {}
+        stats_row = ctk.CTkFrame(card, fg_color="transparent")
+        stats_row.pack(fill="x", padx=12, pady=(6, 4))
+        for key in ("domains", "db_size"):
+            lbl = ctk.CTkLabel(stats_row, text="", anchor="w")
+            lbl.pack(side="left", padx=(0, 20))
+            self._stats_labels[key] = lbl
+        self._refresh_stats()
+
+        # ── DESKTOP INTEGRATION ────────────────────────────────────
+        card = _card(right, "DESKTOP")
+        desktop_row = ctk.CTkFrame(card, fg_color="transparent")
+        desktop_row.pack(fill="x", padx=12, pady=10)
+        self._desktop_btn = ctk.CTkButton(
+            desktop_row, text="Install Desktop Shortcut", width=190,
+            command=self._install_desktop,
+        )
+        self._desktop_btn.pack(side="left", padx=(0, 8))
+        Tooltip(self._desktop_btn, "Create a .desktop launcher entry so the app appears in your GNOME/KDE app menu.")
+
+        # ── CREDITS ────────────────────────────────────────────────
+        card = _card(right, "CREDITS")
+        credits_row = ctk.CTkFrame(card, fg_color="transparent")
+        credits_row.pack(fill="x", padx=12, pady=(8, 12))
+        self._refresh_credits_btn = ctk.CTkButton(credits_row, text="Refresh Credits", width=130,
+                                                   command=self._refresh_credits)
+        self._refresh_credits_btn.pack(side="left")
+        Tooltip(self._refresh_credits_btn,
+                "Re-extract credit headers from source URLs for all library lists that are missing them.")
+
+        # ── LOG VIEWER ─────────────────────────────────────────────
+        card = _card(scroll, "LOG")
+        self._log_box = ctk.CTkTextbox(card, height=140, wrap="word", state="disabled",
+                                        font=ctk.CTkFont(family="Courier New", size=11),
+                                        text_color=("gray10", "gray90"))
+        self._log_box.pack(fill="x", padx=12, pady=(8, 6))
+        log_btn_row = ctk.CTkFrame(card, fg_color="transparent")
+        log_btn_row.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(log_btn_row, text="Refresh", width=80, command=self._refresh_log).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(log_btn_row, text="Open Log File", width=110, command=self._open_log).pack(side="left")
+        self._refresh_log()
+
 
         # Auto-hide scrollbar when content fits
         def _update_scroll_vis(canvas=scroll._parent_canvas, sb=scroll._scrollbar):
@@ -196,31 +212,35 @@ class SettingsTab(ctk.CTkFrame):
                 sb.grid_remove()
         scroll._parent_canvas.bind("<Configure>", lambda _: self.after(0, _update_scroll_vis))
 
+        self._polling_active: bool = False
+
     # ── Actions ─────────────────────────────────────────────────────
 
     def _install_desktop(self) -> None:
         from .._install_desktop import install as _install
         ok, msg = _install()
         if ok:
-            self._desktop_status.configure(text=msg)
-            messagebox.showinfo("Shortcut installed", msg)
+            _log.info("Desktop shortcut installed")
+            self._desktop_btn.configure(state="disabled", text="Installed")
+            self.after(2000, lambda: self._desktop_btn.configure(state="normal", text="Install Desktop Shortcut"))
         else:
+            _log.warning("Desktop shortcut install failed: %s", msg)
             messagebox.showerror("Install failed", msg)
 
     def _refresh_stats(self) -> None:
         stats = self._db.get_library_stats()
-        self._stats_labels["folders"].configure(text=f"Folders: {stats['folder_count']}")
-        self._stats_labels["lists"].configure(text=f"Lists: {stats['list_count']}")
-        self._stats_labels["domains"].configure(text=f"Total domains: {stats['total_domains']:,}")
-        self._stats_labels["db_size"].configure(text=f"Database size: {_format_bytes(stats['db_bytes'])}")
+        self._stats_labels["domains"].configure(text=f"Domains: {_fmt_count(stats['total_domains'])}")
+        self._stats_labels["db_size"].configure(text=f"DB: {_format_bytes(stats['db_bytes'])}")
 
     def _refresh_log(self) -> None:
         log_path = _DATA_DIR / "phlist.log"
         try:
             with open(log_path, encoding="utf-8", errors="replace") as f:
                 lines = deque(f, maxlen=15)
-            # Newest entry first so it's visible without scrolling
-            text = "".join(reversed(lines)).rstrip("\n")
+            # Newest entry first, separator between each for readability
+            text = "\n─────────────────────────────────\n".join(
+                l.rstrip("\n") for l in reversed(lines)
+            )
         except FileNotFoundError:
             text = "(no log file found)"
         self._log_box.configure(state="normal")
@@ -249,8 +269,11 @@ class SettingsTab(ctk.CTkFrame):
             return
         try:
             shutil.copy2(self._db._path, path)
-            messagebox.showinfo("Exported", f"Library backed up to:\n{path}")
+            _log.info("DB exported to: %s", path)
+            self._export_db_btn.configure(state="disabled", text="Exported")
+            self.after(2000, lambda: self._export_db_btn.configure(state="normal", text="Export DB"))
         except Exception as exc:
+            _log.error("DB export failed: %s", exc)
             messagebox.showerror("Export failed", f"Could not export database:\n{exc}")
 
     def _import_db(self) -> None:
@@ -272,11 +295,66 @@ class SettingsTab(ctk.CTkFrame):
             src.backup(self._db._conn)
             src.close()
         except Exception as exc:
+            _log.error("DB import failed: %s", exc)
             messagebox.showerror("Import failed", f"Could not import database:\n{exc}")
             return
+        _log.info("DB imported from: %s", path)
         if self._refresh_library_cb:
             self._refresh_library_cb()
         messagebox.showinfo("Imported", "Library imported successfully.")
+
+    def _reset_db(self) -> None:
+        if not messagebox.askyesno(
+            "Reset Library",
+            "This will permanently delete ALL lists and folders.\n"
+            "Your settings (server URL, API key, etc.) will be kept.\n\n"
+            "This cannot be undone. Continue?",
+            icon="warning",
+        ):
+            return
+        try:
+            self._db.reset_library()
+        except Exception as exc:
+            _log.error("DB reset failed: %s", exc)
+            messagebox.showerror("Reset failed", f"Could not reset library:\n{exc}")
+            return
+        _log.info("Library reset by user")
+        if self._refresh_library_cb:
+            self._refresh_library_cb()
+        self._refresh_stats()
+
+    def _reset_config(self) -> None:
+        if not messagebox.askyesno(
+            "Reset Config",
+            "This will clear all settings — server URL, API key, and all preferences.\n"
+            "Your library lists and folders will not be affected.\n\n"
+            "This cannot be undone. Continue?",
+            icon="warning",
+        ):
+            return
+        try:
+            self._db.reset_settings()
+        except Exception as exc:
+            _log.error("Config reset failed: %s", exc)
+            messagebox.showerror("Reset failed", f"Could not reset config:\n{exc}")
+            return
+        _log.info("Config reset by user")
+        self._polling_active = False
+        # Clear the visible fields
+        self._remote_url_entry.delete(0, "end")
+        self._remote_key_entry.delete(0, "end")
+        if self._notify_server_reachable_cb:
+            self._notify_server_reachable_cb(False)
+        if self._refresh_push_btn_cb:
+            self._refresh_push_btn_cb()
+
+    def _refresh_credits(self) -> None:
+        if self._refresh_credits_cb:
+            self._refresh_credits_cb()
+            self._refresh_credits_btn.configure(state="disabled", text="Done")
+            self.after(2000, lambda: self._refresh_credits_btn.configure(state="normal", text="Refresh Credits"))
+        else:
+            messagebox.showinfo("Refresh Credits", "Library not available.")
 
     def _open_data_folder(self) -> None:
         try:
@@ -289,12 +367,25 @@ class SettingsTab(ctk.CTkFrame):
         key = self._remote_key_entry.get().strip()
         self._db.set_setting("remote_server_url", url)
         self._db.set_setting("remote_server_key", key)
-        self._remote_test_status.configure(text="Saved.", text_color=("gray40", "gray60"))
-        # Changing credentials invalidates the last connection test
+        _log.info("Remote settings saved: url=%s", url or "(cleared)")
+        self._save_remote_btn.configure(state="disabled", text="Saved")
+        self.after(2000, lambda: self._save_remote_btn.configure(state="normal", text="Save"))
+        # Reset test button to untested state since credentials changed
+        self._polling_active = False
+        self._test_conn_btn.configure(state="normal", text="Test Connection",
+                                      fg_color=("gray60", "gray40"),
+                                      hover_color=["#36719F", "#144870"])
+        self._test_conn_tooltip.update("Test your connection to the configured server.")
+        self._remote_conn_status.configure(text="")
         if self._notify_server_reachable_cb:
             self._notify_server_reachable_cb(False)
         if self._refresh_push_btn_cb:
             self._refresh_push_btn_cb()
+
+    def auto_test_connection(self) -> None:
+        """Re-run the connection test silently if a server URL is configured."""
+        if self._remote_url_entry.get().strip():
+            self._test_remote_connection()
 
     def _test_remote_connection(self) -> None:
         url = self._remote_url_entry.get().strip().rstrip("/")
@@ -303,21 +394,87 @@ class SettingsTab(ctk.CTkFrame):
             self._remote_conn_status.configure(text="Enter a server URL first.",
                                                 text_color=("#C0392B", "#E74C3C"))
             return
-        self._remote_conn_status.configure(text="Testing…", text_color=("gray40", "gray60"))
+
+        # Stop any active polling cycle before running a manual test
+        self._polling_active = False
+
+        # Greyed-out "testing" state
+        self._test_conn_btn.configure(state="disabled", text="Waiting...",
+                                      fg_color=("gray60", "gray40"))
+        self._remote_conn_status.configure(text="", text_color=("gray40", "gray60"))
         self.update_idletasks()
 
         def _worker():
             ok, msg = _check_connection(url, key)
-            color = ("#27AE60", "#2ECC71") if ok else ("#C0392B", "#E74C3C")
 
             def _done():
-                self._remote_conn_status.configure(text=msg, text_color=color)
+                _log.info("Test connection: %s", "OK" if ok else f"failed — {msg}")
+                if ok:
+                    self._test_conn_btn.configure(
+                        state="normal", text="Connected",
+                        fg_color=("#27AE60", "#1E8449"),
+                        hover_color=("#219A52", "#196F3D"),
+                    )
+                    self._test_conn_tooltip.update(f"Connected to {url}\nAPI key accepted.")
+                else:
+                    self._test_conn_btn.configure(
+                        state="normal", text="Failed",
+                        fg_color=("#C0392B", "#922B21"),
+                        hover_color=("#A93226", "#7B241C"),
+                    )
+                    self._test_conn_tooltip.update(f"Failed: {msg}")
+                self._remote_conn_status.configure(
+                    text="" if ok else msg,
+                    text_color=("#C0392B", "#E74C3C"),
+                )
                 if self._notify_server_reachable_cb:
                     self._notify_server_reachable_cb(ok)
+                # Begin session polling now that user has manually tested once
+                self._polling_active = True
+                self.after(_POLL_INTERVAL_MS, self._poll_connection)
 
             self.after(0, _done)
 
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _on_autopush_toggle(self) -> None:
-        self._db.set_setting("remote_auto_push", self._autopush_var.get())
+    def _poll_connection(self) -> None:
+        """Silent background re-check; updates button + reachable state without user input."""
+        if not self._polling_active:
+            return
+        url = self._remote_url_entry.get().strip().rstrip("/")
+        key = self._remote_key_entry.get().strip()
+        if not url:
+            self._polling_active = False
+            return
+
+        def _worker():
+            ok, msg = _check_connection(url, key)
+
+            def _done():
+                if ok:
+                    self._test_conn_btn.configure(
+                        state="normal", text="Connected",
+                        fg_color=("#27AE60", "#1E8449"),
+                        hover_color=("#219A52", "#196F3D"),
+                    )
+                    self._test_conn_tooltip.update(f"Connected to {url}\nAPI key accepted.")
+                    self._remote_conn_status.configure(text="")
+                else:
+                    self._test_conn_btn.configure(
+                        state="normal", text="Failed",
+                        fg_color=("#C0392B", "#922B21"),
+                        hover_color=("#A93226", "#7B241C"),
+                    )
+                    self._test_conn_tooltip.update(f"Failed: {msg}")
+                    self._remote_conn_status.configure(
+                        text=msg, text_color=("#C0392B", "#E74C3C"),
+                    )
+                if self._notify_server_reachable_cb:
+                    self._notify_server_reachable_cb(ok)
+                if self._polling_active:
+                    self.after(_POLL_INTERVAL_MS, self._poll_connection)
+
+            self.after(0, _done)
+
+        threading.Thread(target=_worker, daemon=True).start()
+

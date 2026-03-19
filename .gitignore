@@ -47,9 +47,6 @@ pip-delete-this-directory.txt
 *.swo
 *~
 
-# Project specific
-data/output/
-
 # Keep bundled assets even if other binary rules would catch them
 !src/phlist/assets/*.png
 !src/phlist/assets/*.svg
