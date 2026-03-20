@@ -25,13 +25,16 @@ A Python desktop app that fetches, parses, and deduplicates multiple Pi-hole blo
 - **Re-fetch Sources** — re-fetch source URLs for selected lists and rebuild them with fresh data; works with single or multi-select, with a progress bar
 - **Combine Selected** — multi-select lists in the Library (Ctrl+click) and merge them into one deduplicated list
 - **Refresh Credits** — retroactively extract author credits from source URLs for older saved lists
-- **Copy Sources** — one-click copy of all source labels to the clipboard
+- **Copy Sources** — one-click copy of all source labels to the clipboard (disabled when no sources are present)
 - **Fetch cache** — re-combining after adding a few new sources skips re-downloading previously fetched URLs
 - **Source dedup** — duplicate URLs are blocked on add; sources display sorted alphabetically
+- **URL entry smart states** — add-URL button is greyed out when empty, turns red for non-http(s) input, and updates its tooltip to match the Blocklist/Allowlist toggle
+- **Blocklist/Allowlist wording sync** — all tooltips and the push-dialog slug hint update in real time when you toggle between Blocklist and Allowlist mode
+- **Configurable timeouts & size cap** — push timeout, fetch timeout, and max source size (MB) are all configurable in Settings and persist across restarts
 - **Splash screen** — branded loading screen with app logo while the GUI initializes
 - **Logging** — rotating log file at `~/.local/share/phlist/phlist.log` for debugging
 - **Export / Import database** — back up your entire library to a `.db` file and restore it on any machine
-- **Security hardening** — 50 MB response cap, null-byte stripping, SSRF redirect protection, and unicode bidi-override sanitization on saved names
+- **Security hardening** — 50 MB response cap, null-byte stripping, SSRF redirect protection, unicode bidi-override sanitization on saved names, and DB file locked to owner-only permissions (0600) on every launch
 - Dark mode desktop GUI (customtkinter)
 - Window and taskbar icon
 - Install desktop shortcut / launcher entry (Linux)
@@ -54,7 +57,7 @@ The app opens with three tabs:
 
 - **Combine** — add sources (URL / file / paste), click *Combine All*, then copy, save, export, or push to your phlist-server
 - **Library** — browse saved lists organized in folders, view contents, export, update from sources, or load back into the combiner
-- **Settings** — two-column card layout: Remote Server (URL + API key + Test Connection), combine defaults (timeout + filename), library stats, inline log viewer, desktop shortcut installer, and database export/import — all settings persist across restarts
+- **Settings** — two-column card layout: Remote Server (URL + API key + push timeout + Test Connection), Sources (fetch timeout + max source size), combine defaults, library stats, inline log viewer, desktop shortcut installer, and database export/import — all settings persist across restarts
 
 > **Note:** The Blocklist/Allowlist toggle only changes the output header label — it does not affect how Pi-hole processes the list. Blocklists and allowlists should be added on the **Lists** tab in Pi-hole's dashboard.
 
@@ -171,11 +174,15 @@ pytest tests/
 - `Pillow` (splash screen logo)
 - SQLite (Python stdlib)
 
-## What's new in v2.0.2
+## What's new in v2.0.3
 
-- **Copy Sources** — new button in the sources panel toolbar to copy all source labels to the clipboard
-- **Push requires verified connection** — the Push button is now disabled until Test Connection succeeds; no more accidentally pushing to an unverified server
-- **Save to Library stays on Combine tab** — no longer auto-switches to the Library tab after saving
-- **API key field Ctrl+A** — the API key entry in Settings now supports Ctrl+A to select all
+- **Configurable push timeout** — new "Push timeout (s)" field in the Remote Server settings card (default 300 s)
+- **Sources settings card** — new Settings card with "Fetch timeout (s)" and "Max source size (MB)" fields; both persist and are applied during Combine
+- **URL entry smart states** — the add-URL (`+`) button is greyed out when the field is empty, turns red if non-http(s) text is typed, and shows context-aware tooltips
+- **Blocklist/Allowlist wording sync** — tooltips and the push-dialog slug hint update in real time when you switch between Blocklist and Allowlist mode
+- **Copy Sources properly disabled** — the Copy Sources button is now unclickable when no sources are present
+- **http:// warning** — saving an `http://` server URL in Settings shows an orange warning that the API key will be sent in plaintext
+- **DB file permissions** — `phlist.db` is locked to owner read/write only (0600) on every launch
+- **Desktop installer** — button reads "Reinstall Shortcut" if the launcher already exists; reinstall cleans up legacy `piholecombinelist.desktop` files
 
 See [CHANGELOG.md](CHANGELOG.md) for the full version history.
