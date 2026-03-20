@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.4] - 2026-03-20
+
+### Changed
+- **Push confirmation shortened** — success dialog now shows one line ("URL copied to clipboard: …") instead of repeating the URL twice
+
+### Docs
+- Replaced `YOUR.SERVER.IP` placeholder in README with `.PUT.IP.HERE` for consistency with phlist-server docs
+
 ## [2.0.3] - 2026-03-19
 
 ### Added

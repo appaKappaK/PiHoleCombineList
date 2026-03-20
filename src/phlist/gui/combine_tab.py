@@ -1010,10 +1010,7 @@ class CombineTab(ctk.CTkFrame):
                         self.clipboard_append(pi_url)
                     except Exception:
                         pass
-                    messagebox.showinfo(
-                        "Pushed",
-                        f"{msg}\n\nPi-hole URL (copied to clipboard):\n{pi_url}",
-                    )
+                    messagebox.showinfo("Pushed", f"URL copied to clipboard:\n{pi_url}")
                 else:
                     self._push_btn.configure(
                         state="normal", text="Push",
