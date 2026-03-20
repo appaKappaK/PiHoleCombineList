@@ -20,10 +20,6 @@ _GITHUB_BLOB_RE = re.compile(
     r'^https?://github\.com/([^/]+/[^/]+)/blob/(.+)$'
 )
 
-# Maximum response body accepted (50 MB). Larger responses are rejected to
-# prevent memory exhaustion from malicious or runaway list servers.
-_MAX_FETCH_BYTES = 50 * 1024 * 1024
-
 from . import __version__
 
 
@@ -39,8 +35,9 @@ def _is_private_url(url: str) -> bool:
 class ListFetcher:
     """Fetch raw blocklist text from a URL or local file path."""
 
-    def __init__(self, timeout: int = 30) -> None:
+    def __init__(self, timeout: int = 30, max_bytes: int = 50 * 1024 * 1024) -> None:
         self.timeout = timeout
+        self._max_bytes = max_bytes
         self._session = requests.Session()
         self._session.headers["User-Agent"] = f"phlist/{__version__}"
         self.successful = 0
@@ -79,7 +76,7 @@ class ListFetcher:
             cl = response.headers.get("Content-Length")
             if cl:
                 try:
-                    if int(cl) > _MAX_FETCH_BYTES:
+                    if int(cl) > self._max_bytes:
                         _log.warning("Skipping %s — Content-Length %s exceeds limit", url, cl)
                         self.failed += 1
                         return None
@@ -89,7 +86,7 @@ class ListFetcher:
             content = response.text
 
             # Reject oversized body (no Content-Length or compressed response)
-            if len(content.encode()) > _MAX_FETCH_BYTES:
+            if len(content.encode()) > self._max_bytes:
                 _log.warning("Skipping %s — response body exceeds size limit", url)
                 self.failed += 1
                 return None

@@ -6,6 +6,7 @@ import sqlite3
 import subprocess
 import threading
 from collections import deque
+from pathlib import Path
 from tkinter import filedialog, messagebox
 from typing import Callable, Optional
 
@@ -112,6 +113,15 @@ class SettingsTab(ctk.CTkFrame):
         )[-1])
         Tooltip(self._remote_key_entry, "Bearer token the server requires for PUT requests.")
 
+        ctk.CTkLabel(fields, text="Push timeout (s):", width=90, anchor="w").grid(
+            row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        self._push_timeout_entry = ctk.CTkEntry(fields, width=80)
+        self._push_timeout_entry.insert(0, self._db.get_setting("push_timeout", "300"))
+        self._push_timeout_entry.grid(row=2, column=1, sticky="w")
+        Tooltip(self._push_timeout_entry,
+                "Seconds before a push to phlist-server times out. "
+                "Increase for slow connections or very large lists.")
+
         action_row = ctk.CTkFrame(card, fg_color="transparent")
         action_row.pack(fill="x", padx=12, pady=(8, 12))
         self._test_conn_btn = ctk.CTkButton(
@@ -131,8 +141,65 @@ class SettingsTab(ctk.CTkFrame):
         self._remote_test_status.pack(side="right", padx=(0, 8))
 
 
+        # ── SOURCES ────────────────────────────────────────────────
+        card = _card(left, "SOURCES")
+        src_fields = ctk.CTkFrame(card, fg_color="transparent")
+        src_fields.pack(fill="x", padx=12, pady=(10, 0))
+
+        ctk.CTkLabel(src_fields, text="Fetch timeout (s):", width=140, anchor="w").grid(
+            row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 6))
+        self._fetch_timeout_entry = ctk.CTkEntry(src_fields, width=70)
+        self._fetch_timeout_entry.insert(0, self._db.get_setting("fetch_timeout", "30"))
+        self._fetch_timeout_entry.grid(row=0, column=1, sticky="w")
+        Tooltip(self._fetch_timeout_entry, "Seconds to wait for each source URL before giving up.")
+
+        ctk.CTkLabel(src_fields, text="Max source size (MB):", width=140, anchor="w").grid(
+            row=1, column=0, sticky="w", padx=(0, 6))
+        self._max_fetch_mb_entry = ctk.CTkEntry(src_fields, width=70)
+        self._max_fetch_mb_entry.insert(0, self._db.get_setting("max_fetch_mb", "50"))
+        self._max_fetch_mb_entry.grid(row=1, column=1, sticky="w")
+        Tooltip(self._max_fetch_mb_entry,
+                "Maximum size (MB) accepted from a single source URL. "
+                "Sources larger than this are skipped during combine.")
+
+        src_action = ctk.CTkFrame(card, fg_color="transparent")
+        src_action.pack(fill="x", padx=12, pady=(8, 12))
+        self._src_status = ctk.CTkLabel(src_action, text="", font=ctk.CTkFont(size=11),
+                                        text_color=("gray40", "gray60"))
+        self._src_status.pack(side="left")
+        ctk.CTkButton(src_action, text="Apply", width=70,
+                      command=self._apply_source_settings).pack(side="right")
+
+        # ── Right column ───────────────────────────────────────────
+        right = ctk.CTkFrame(cols, fg_color="transparent")
+        right.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+
+        # ── LIBRARY STATS ──────────────────────────────────────────
+        card = _card(right, "LIBRARY")
+        self._stats_labels: dict[str, ctk.CTkLabel] = {}
+        stats_row = ctk.CTkFrame(card, fg_color="transparent")
+        stats_row.pack(fill="x", padx=12, pady=(6, 4))
+        for key in ("domains", "db_size"):
+            lbl = ctk.CTkLabel(stats_row, text="", anchor="w")
+            lbl.pack(side="left", padx=(0, 20))
+            self._stats_labels[key] = lbl
+        self._refresh_stats()
+
+        # ── DESKTOP INTEGRATION ────────────────────────────────────
+        card = _card(right, "DESKTOP")
+        desktop_row = ctk.CTkFrame(card, fg_color="transparent")
+        desktop_row.pack(fill="x", padx=12, pady=10)
+        _desktop_file = Path.home() / ".local/share/applications/phlist.desktop"
+        _desktop_label = "Reinstall Shortcut" if _desktop_file.is_file() else "Install Desktop Shortcut"
+        self._desktop_btn = ctk.CTkButton(
+            desktop_row, text=_desktop_label, width=190,
+            command=self._install_desktop,
+        )
+        self._desktop_btn.pack(side="left", padx=(0, 8))
+        Tooltip(self._desktop_btn, "Create a .desktop launcher entry so the app appears in your GNOME/KDE app menu.")
+
         # ── DATA ───────────────────────────────────────────────────
-        card = _card(left, "DATA")
+        card = _card(right, "DATA")
         data_row = ctk.CTkFrame(card, fg_color="transparent")
         data_row.pack(fill="x", padx=12, pady=10)
         self._export_db_btn = ctk.CTkButton(data_row, text="Export DB", width=90, command=self._export_db)
@@ -159,42 +226,16 @@ class SettingsTab(ctk.CTkFrame):
                                       command=self._reset_config)
         reset_cfg_btn.pack(side="left")
         Tooltip(reset_cfg_btn, "Clear all settings (server URL, API key, preferences). Library lists are kept.")
-
-        # ── Right column ───────────────────────────────────────────
-        right = ctk.CTkFrame(cols, fg_color="transparent")
-        right.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
-
-        # ── LIBRARY STATS ──────────────────────────────────────────
-        card = _card(right, "LIBRARY")
-        self._stats_labels: dict[str, ctk.CTkLabel] = {}
-        stats_row = ctk.CTkFrame(card, fg_color="transparent")
-        stats_row.pack(fill="x", padx=12, pady=(6, 4))
-        for key in ("domains", "db_size"):
-            lbl = ctk.CTkLabel(stats_row, text="", anchor="w")
-            lbl.pack(side="left", padx=(0, 20))
-            self._stats_labels[key] = lbl
-        self._refresh_stats()
-
-        # ── DESKTOP INTEGRATION ────────────────────────────────────
-        card = _card(right, "DESKTOP")
-        desktop_row = ctk.CTkFrame(card, fg_color="transparent")
-        desktop_row.pack(fill="x", padx=12, pady=10)
-        self._desktop_btn = ctk.CTkButton(
-            desktop_row, text="Install Desktop Shortcut", width=190,
-            command=self._install_desktop,
+        self._refresh_credits_btn = ctk.CTkButton(
+            data_row2, text="Refresh Credits", width=120,
+            fg_color=("gray60", "gray40"), hover_color=["#36719F", "#144870"],
+            command=self._refresh_credits,
         )
-        self._desktop_btn.pack(side="left", padx=(0, 8))
-        Tooltip(self._desktop_btn, "Create a .desktop launcher entry so the app appears in your GNOME/KDE app menu.")
-
-        # ── CREDITS ────────────────────────────────────────────────
-        card = _card(right, "CREDITS")
-        credits_row = ctk.CTkFrame(card, fg_color="transparent")
-        credits_row.pack(fill="x", padx=12, pady=(8, 12))
-        self._refresh_credits_btn = ctk.CTkButton(credits_row, text="Refresh Credits", width=130,
-                                                   command=self._refresh_credits)
-        self._refresh_credits_btn.pack(side="left")
+        self._refresh_credits_btn.pack(side="left", padx=(8, 0))
         Tooltip(self._refresh_credits_btn,
-                "Re-extract credit headers from source URLs for all library lists that are missing them.")
+                "Legacy function — rarely needed.\n"
+                "Re-extracts author credit headers from source URLs for library lists that are missing them.\n"
+                "Only useful if you have older lists saved before credits were tracked automatically.")
 
         # ── LOG VIEWER ─────────────────────────────────────────────
         card = _card(scroll, "LOG")
@@ -229,7 +270,7 @@ class SettingsTab(ctk.CTkFrame):
         if ok:
             _log.info("Desktop shortcut installed")
             self._desktop_btn.configure(state="disabled", text="Installed")
-            self.after(2000, lambda: self._desktop_btn.configure(state="normal", text="Install Desktop Shortcut"))
+            self.after(2000, lambda: self._desktop_btn.configure(state="normal", text="Reinstall Shortcut"))
         else:
             _log.warning("Desktop shortcut install failed: %s", msg)
             messagebox.showerror("Install failed", msg)
@@ -364,6 +405,15 @@ class SettingsTab(ctk.CTkFrame):
         else:
             messagebox.showinfo("Refresh Credits", "Library not available.")
 
+    def _apply_source_settings(self) -> None:
+        for key, entry in [("fetch_timeout", self._fetch_timeout_entry),
+                           ("max_fetch_mb", self._max_fetch_mb_entry)]:
+            val = entry.get().strip()
+            if val.isdigit() and int(val) > 0:
+                self._db.set_setting(key, val)
+        self._src_status.configure(text="Saved")
+        self.after(2000, lambda: self._src_status.configure(text=""))
+
     def _open_data_folder(self) -> None:
         try:
             subprocess.Popen(["xdg-open", str(_DATA_DIR)])
@@ -375,9 +425,17 @@ class SettingsTab(ctk.CTkFrame):
         key = self._remote_key_entry.get().strip()
         self._db.set_setting("remote_server_url", url)
         self._db.set_setting("remote_server_key", key)
+        val = self._push_timeout_entry.get().strip()
+        if val.isdigit() and int(val) > 0:
+            self._db.set_setting("push_timeout", val)
         _log.info("Remote settings saved: url=%s", url or "(cleared)")
         self._save_remote_btn.configure(state="disabled", text="Saved")
         self.after(2000, lambda: self._save_remote_btn.configure(state="normal", text="Save"))
+        if url.startswith("http://"):
+            self._remote_conn_status.configure(
+                text="Note: API key sent in plaintext over http",
+                text_color=("orange", "orange"),
+            )
         # Reset test button to untested state since credentials changed
         self._polling_active = False
         self._poll_generation += 1

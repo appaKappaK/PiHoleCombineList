@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from phlist.fetcher import ListFetcher, _MAX_FETCH_BYTES
+from phlist.fetcher import ListFetcher
 
 
 def test_fetch_file_success(tmp_path):
@@ -107,7 +107,7 @@ def test_fetch_url_success():
 
 def test_fetch_url_size_limit_content_length():
     fetcher = ListFetcher()
-    big_cl = str(_MAX_FETCH_BYTES + 1)
+    big_cl = str(fetcher._max_bytes + 1)
     resp = _mock_response("x", headers={"Content-Length": big_cl})
     with patch.object(fetcher._session, "get", return_value=resp):
         result = fetcher.fetch_url("https://example.com/list.txt")
@@ -118,7 +118,7 @@ def test_fetch_url_size_limit_content_length():
 def test_fetch_url_size_limit_body():
     fetcher = ListFetcher()
     # Body just over the limit, no Content-Length header
-    big_body = "a" * (_MAX_FETCH_BYTES + 1)
+    big_body = "a" * (fetcher._max_bytes + 1)
     with patch.object(fetcher._session, "get", return_value=_mock_response(big_body)):
         result = fetcher.fetch_url("https://example.com/list.txt")
     assert result is None

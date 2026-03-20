@@ -2,8 +2,10 @@
 # v1.1.1
 
 import logging
+import os
 import re as _re
 import sqlite3
+import stat
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -57,6 +59,10 @@ class Database:
             db_path = _DATA_DIR / "phlist.db"
         self._path = db_path
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        try:
+            os.chmod(db_path, stat.S_IRUSR | stat.S_IWUSR)  # 0o600
+        except OSError:
+            pass
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
         self._init_schema()

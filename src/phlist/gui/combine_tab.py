@@ -746,7 +746,8 @@ class CombineTab(ctk.CTkFrame):
 
     def _run_combine(self) -> None:
         timeout = int(self._db.get_setting("fetch_timeout", "30"))
-        fetcher = ListFetcher(timeout=timeout)
+        max_mb  = int(self._db.get_setting("max_fetch_mb", "50"))
+        fetcher = ListFetcher(timeout=timeout, max_bytes=max_mb * 1024 * 1024)
         combiner = ListCombiner()
         failed_sources: list[str] = []
         total = len(self._sources)
@@ -965,7 +966,8 @@ class CombineTab(ctk.CTkFrame):
         self._push_btn.configure(state="disabled", text="Pushing...")
 
         def _worker():
-            ok, msg = _push_list(base_url, api_key, slug, content)
+            push_timeout = int(self._db.get_setting("push_timeout", "300"))
+            ok, msg = _push_list(base_url, api_key, slug, content, timeout=push_timeout)
 
             def _done():
                 if ok:

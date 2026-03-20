@@ -7,7 +7,7 @@ import urllib.request
 _log = logging.getLogger(__name__)
 
 
-def push_list(base_url: str, api_key: str, slug: str, content: str) -> tuple[bool, str]:
+def push_list(base_url: str, api_key: str, slug: str, content: str, timeout: int = 300) -> tuple[bool, str]:
     """PUT *content* to ``{base_url}/lists/{slug}.txt`` with Bearer auth.
 
     Returns ``(success, message)``.
@@ -22,7 +22,7 @@ def push_list(base_url: str, api_key: str, slug: str, content: str) -> tuple[boo
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=300) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             _log.info("push_list: PUT %s → %s", url, resp.status)
             return True, f"Pushed to {url}"
     except urllib.error.HTTPError as exc:

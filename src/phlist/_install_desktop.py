@@ -61,6 +61,24 @@ def install() -> tuple[bool, str]:
             line
             for line in desktop_content.splitlines()
         ) + "\n"
+        # Remove stale launchers from before the rename.
+        # Known old filename first, then a content scan as a fallback net.
+        _KNOWN_OLD = {"piholecombinelist.desktop", "PiHoleCombineList.desktop"}
+        for old_file in apps_dir.glob("*.desktop"):
+            if old_file.name == "phlist.desktop":
+                continue
+            try:
+                if old_file.name in _KNOWN_OLD:
+                    old_file.unlink()
+                    continue
+                text = old_file.read_text(encoding="utf-8", errors="replace").lower()
+                if ("blocklist" in text and "combiner" in text
+                        and ("pihole" in text or "pi-hole" in text)
+                        and ("phlist" in text or "piholecombinelist" in text)):
+                    old_file.unlink()
+            except OSError:
+                pass
+
         (apps_dir / "phlist.desktop").write_text(desktop_content, encoding="utf-8")
 
         # Update caches (best-effort — missing tools are fine)

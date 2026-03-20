@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.0.3] - 2026-03-19
+
+### Added
+- **Configurable push timeout** — new "Push timeout (s)" field in the Remote Server settings card; persisted to DB, used when pushing to phlist-server (default 300 s)
+- **Sources settings card** — new card in Settings with "Fetch timeout (s)" and "Max source size (MB)" fields; both persist to DB and are applied when fetching sources during Combine (defaults: 30 s / 50 MB)
+- **http:// warning** — saving an `http://` server URL in Settings shows an orange warning that the API key will be sent in plaintext
+
+### Changed
+- **DATA card reorganised** — moved to right column (below Desktop); buttons condensed from 3 rows to 2: row 1 Export DB / Import DB / Open Folder, row 2 Reset Library / Reset Config / Refresh Credits
+- **Refresh Credits merged into DATA card** — removed standalone Credits card; Refresh Credits button is greyed with tooltip explaining it is a legacy helper
+- **Desktop installer** — button now reads "Reinstall Shortcut" if `phlist.desktop` already exists; on reinstall, cleans up legacy `piholecombinelist.desktop` launchers and any `.desktop` file fingerprint-matched as an old version
+- **DB file permissions** — `phlist.db` is `chmod 0600` (owner read/write only) on every launch; prevents other local users from reading the stored API key
+- Fetcher `_MAX_FETCH_BYTES` moved from module constant to `ListFetcher.__init__` parameter (`max_bytes`), making it configurable at instantiation
+
+### Fixed
+- `test_fetcher.py` updated to use `fetcher._max_bytes` after `_MAX_FETCH_BYTES` module constant was removed
+
 ## [2.0.2] - 2026-03-19
 
 ### Added
